@@ -1,5 +1,5 @@
 #!/bin/bash
-# Assumes that the database name and password are dept in a secure directory
+# Assumes that the database name and password are kept in a secure directory
 set -e
 SQL_DIR="$HOME/mysql"
 DB_NAME=`cat $SQL_DIR/db_name`
