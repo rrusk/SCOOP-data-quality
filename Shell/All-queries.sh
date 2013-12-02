@@ -7,4 +7,4 @@ DB_NAME=`cat $SQL_DIR/db_name`
 PASSWD=`cat $SQL_DIR/passwd`
 SQL_REPO="$SQL_DIR/SCOOP-data-quality/PolypharmacySQLQueries"
 cd $SQL_REPO
-mysql -h 127.0.0.1 -P 3307 -u oscarb --database=$DB_NAME -n -vvv -t -AU --password=$PASSWD < All_queries.sql > $SQL_DIR/All-query-results-$DATETIME.out 2>&1
+mysql -h 127.0.0.1 -P 3307 -u oscarb --database=$DB_NAME -n -vvv -t -AU --password=$PASSWD < All_queries.sql > $SQL_DIR/All-query-results-$DATETIME.txt 2>&1

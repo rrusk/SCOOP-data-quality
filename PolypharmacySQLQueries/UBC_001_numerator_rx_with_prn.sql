@@ -29,4 +29,4 @@ rx_date <= NOW() AND
      (DATE_ADD(dr.rx_date, INTERVAL (DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW()
      GROUP BY dr.demographic_no
      HAVING COUNT(dr.drugid) >= 5
-     )
+     );

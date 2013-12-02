@@ -28,4 +28,4 @@ NULL AND
                                          GROUP BY dr.demographic_no
                                          HAVING COUNT(DISTINCT
 dr.regional_identifier) >= 10
-                                         )
+                                         );

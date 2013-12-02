@@ -26,4 +26,4 @@ AND
 dr.prn IN (0)     
 GROUP BY dr.demographic_no
      HAVING COUNT(dr.drugid) >= 10
-     )
+     );

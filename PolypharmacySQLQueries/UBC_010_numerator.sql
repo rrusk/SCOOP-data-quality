@@ -13,6 +13,4 @@ CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) >= DATE_SUB( N
 
 CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=  DATE_SUB( NOW(), INTERVAL 0 YEAR ) AND
 
-d.sex = 'M'
-
-
+d.sex = 'M';

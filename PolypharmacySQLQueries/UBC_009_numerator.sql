@@ -6,7 +6,4 @@ FROM
   demographic AS d
 
 WHERE
-  d.patient_status = 'AC' 
-  
-
-
+  d.patient_status = 'AC'; 
