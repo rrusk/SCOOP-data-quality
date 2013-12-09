@@ -2,7 +2,7 @@
 # Assumes that the database db_user, db_passwd, db_name and db_port are kept in a secure directory ~/mysql
 set -e
 DATETIME=`date +"%Y%m%d%H%M"`
-SQL_DIR="$HOME/mysql"
+SQL_DIR="$HOME/mysql/db_config"
 DB_USER=`cat $SQL_DIR/db_user`
 DB_NAME=`cat $SQL_DIR/db_name`
 DB_PASSWD=`cat $SQL_DIR/db_passwd`
