@@ -13,6 +13,8 @@ import time
 con = None
 f = None
 
+field_width = 5
+
 #    SELECT COUNT(d.demographic_no) AS Count
 #    FROM demographic AS d
 #    WHERE d.patient_status = 'AC' AND
@@ -24,7 +26,7 @@ def query_string(lo, hi, gender):
     result = []
     result.append(" SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d WHERE d.patient_status = 'AC' AND ")
     result.append(" CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) > DATE_SUB( NOW(), INTERVAL ")
-    result.append(str(hi+1))
+    result.append(str(hi))
     result.append(" YEAR ) AND ")
     result.append(" CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <= DATE_SUB( NOW(), INTERVAL ")
     result.append(str(lo))
@@ -34,7 +36,7 @@ def query_string(lo, hi, gender):
 
 def print_result(cursor, lo, hi, gender):
     cursor.execute(query_string(lo, hi, gender))
-    print "%s" % str(cursor.fetchone()[0]).rjust(5),
+    print "%s" % str(cursor.fetchone()[0]).rjust(field_width),
 
 try:
     from os.path import expanduser
@@ -60,17 +62,21 @@ try:
     cur = con.cursor()
 
     print("Demographics")
-    print_result(cur, 0, 199, " in ('M')")
-    print_result(cur, 0, 199, " in ('F')")
-    print_result(cur, 0, 199, " not in ('M','F')")
-    print(" total_0-199 M/F/UNKNOWN")
+    print('M'.rjust(field_width)),
+    print('F'.rjust(field_width)),
+    print('Other'.rjust(field_width)),
+    print(' Age Range'.ljust(3*field_width))
+    print_result(cur, 0, 130, " in ('M')")
+    print_result(cur, 0, 130, " in ('F')")
+    print_result(cur, 0, 130, " not in ('M','F')")
+    print("[0, 130)")
     print("")
 
     for indx in range(0, 130, 10):
-        print_result(cur, indx, indx+9, " in ('M')")
-        print_result(cur, indx, indx+9, " in ('F')")
-        print_result(cur, indx, indx+9, " not in ('M','F')")
-        print(" total_" + str(indx) + "-" + str(indx+9) + " M/F/UNKNOWN")
+        print_result(cur, indx, indx+10, " in ('M')")
+        print_result(cur, indx, indx+10, " in ('F')")
+        print_result(cur, indx, indx+10, " not in ('M','F')")
+        print("[" + str(indx) + ", " + str(indx+10) + ")")
 
 except mdb.Error, e:
 
