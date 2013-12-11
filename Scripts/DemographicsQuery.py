@@ -28,9 +28,8 @@ def query_string(lo, hi, gender):
     result.append(" YEAR ) AND ")
     result.append(" CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <= DATE_SUB( NOW(), INTERVAL ")
     result.append(str(lo))
-    result.append(" YEAR) AND d.sex = '")
+    result.append(" YEAR) AND d.sex ")
     result.append(str(gender))
-    result.append("'")
     return ''.join(result);
 
 def print_result(cursor, lo, hi, gender):
@@ -60,76 +59,16 @@ try:
 
     cur = con.cursor()
 
-
     print("total_0-199 M/F/UN")
-    print_result(cur, 0, 199, 'M')
-    print_result(cur, 0, 199, 'F')
-    print_result(cur, 0, 199, 'U')
+    print_result(cur, 0, 199, " in ('M')")
+    print_result(cur, 0, 199, " in ('F')")
+    print_result(cur, 0, 199, " not in ('M','F')")
 
-    print("total_0-9 M/F/UN")
-    print_result(cur, 0, 9, 'M')
-    print_result(cur, 0, 9, 'F')
-    print_result(cur, 0, 9, 'U')
-
-    print("total_10-19 M/F/UN")
-    print_result(cur, 10, 19, 'M')
-    print_result(cur, 10, 19, 'F')
-    print_result(cur, 10, 19, 'U')
-
-    print("total_20-29 M/F/UN")
-    print_result(cur, 20, 29, 'M')
-    print_result(cur, 20, 29, 'F')
-    print_result(cur, 20, 29, 'U')
-
-    print("total_30-39 M/F/UN")
-    print_result(cur, 30, 39, 'M')
-    print_result(cur, 30, 39, 'F')
-    print_result(cur, 30, 39, 'U')
-
-    print("total_40-49 M/F/UN")
-    print_result(cur, 40, 49, 'M')
-    print_result(cur, 40, 49, 'F')
-    print_result(cur, 40, 49, 'U')
-
-    print("total_50-59 M/F/UN")
-    print_result(cur, 50, 59, 'M')
-    print_result(cur, 50, 59, 'F')
-    print_result(cur, 50, 59, 'U')
-
-    print("total_60-69 M/F/UN")
-    print_result(cur, 60, 69, 'M')
-    print_result(cur, 60, 69, 'F')
-    print_result(cur, 60, 69, 'U')
-
-    print("total_70-79 M/F/UN")
-    print_result(cur, 70, 79, 'M')
-    print_result(cur, 70, 79, 'F')
-    print_result(cur, 70, 79, 'U')
-
-    print("total_80-89 M/F/UN")
-    print_result(cur, 80, 89, 'M')
-    print_result(cur, 80, 89, 'F')
-    print_result(cur, 80, 89, 'U')
-
-    print("total_90-99 M/F/UN")
-    print_result(cur, 90, 99, 'M')
-    print_result(cur, 90, 99, 'F')
-    print_result(cur, 90, 99, 'U')
-
-    print("total_100-109 M/F/UN")
-    print_result(cur, 100, 109, 'M')
-    print_result(cur, 100, 109, 'F')
-    print_result(cur, 100, 109, 'U')
-
-    print("total_110-119 M/F/UN")
-    print_result(cur, 110, 119, 'M')
-    print_result(cur, 110, 119, 'F')
-    print_result(cur, 110, 119, 'U')
-
-    print("total_120-129 M/F/UN")
-    print_result(cur, 120, 129, 'M')
-    print_result(cur, 120, 129, 'F')
-    print_result(cur, 120, 129, 'U')
+    for indx in range(0, 130, 10):
+        print("total_" + str(indx) + "-" + str(indx+9) + " M/F/UNKNOWN")
+        print_result(cur, indx, indx+9, " in ('M')")
+        print_result(cur, indx, indx+9, " in ('F')")
+        print_result(cur, indx, indx+9, " not in ('M','F')")
 
 except mdb.Error, e:
 
