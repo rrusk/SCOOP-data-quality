@@ -34,7 +34,7 @@ def query_string(lo, hi, gender):
 
 def print_result(cursor, lo, hi, gender):
     cursor.execute(query_string(lo, hi, gender))
-    print "%s" % cursor.fetchone(),
+    print "%s" % str(cursor.fetchone()[0]).rjust(5),
 
 try:
     from os.path import expanduser
@@ -63,14 +63,14 @@ try:
     print_result(cur, 0, 199, " in ('M')")
     print_result(cur, 0, 199, " in ('F')")
     print_result(cur, 0, 199, " not in ('M','F')")
-    print("total_0-199 M/F/UNKNOWN")
+    print(" total_0-199 M/F/UNKNOWN")
     print("")
 
     for indx in range(0, 130, 10):
         print_result(cur, indx, indx+9, " in ('M')")
         print_result(cur, indx, indx+9, " in ('F')")
         print_result(cur, indx, indx+9, " not in ('M','F')")
-        print("total_" + str(indx) + "-" + str(indx+9) + " M/F/UNKNOWN")
+        print(" total_" + str(indx) + "-" + str(indx+9) + " M/F/UNKNOWN")
 
 except mdb.Error, e:
 
