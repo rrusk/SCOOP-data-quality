@@ -14,13 +14,13 @@ con = None
 f = None
 
 without_prn = " AND dr.prn IN (0)"
-with_prn = ''
+with_prn = None
 distinct = "DISTINCT"
-not_distinct = ''
+not_distinct = None
 whole_population = 'whole_population'
-demo_id = ''
+demographic_id = None
 
-def target_group(pop=demo_id):
+def target_group(pop=demographic_id):
     result = []
     result.append("SELECT")
     if pop is whole_population:
@@ -31,7 +31,7 @@ def target_group(pop=demo_id):
     result.append(" FROM demographic AS d WHERE d.patient_status = 'AC' AND")
     result.append(" CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <")
     result.append(" DATE_SUB( NOW(), INTERVAL 64 YEAR )")
-    if pop is demo_id:
+    if pop is demographic_id:
         result.append(" AND d.demographic_no = %s")
     return ''.join(result)
 
