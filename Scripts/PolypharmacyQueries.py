@@ -13,60 +13,43 @@ import time
 con = None
 f = None
 
-polypharmacy = ("SELECT dr.demographic_no FROM drugs AS dr "
-          "WHERE dr.archived = 0 AND dr.regional_identifier IS NOT NULL AND "
-            "dr.regional_identifier != '' AND dr.ATC IS NOT NULL AND "
-            "dr.ATC != '' AND rx_date <= NOW() AND "
-            "(DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW() "
-          "GROUP BY dr.demographic_no "
-          "HAVING COUNT(DISTINCT dr.regional_identifier) >= ")
-
-polypharmacy_nonunique = ("SELECT dr.demographic_no FROM drugs AS dr "
-          "WHERE dr.archived = 0 AND dr.regional_identifier IS NOT NULL AND "
-            "dr.regional_identifier != '' AND dr.ATC IS NOT NULL AND "
-            "dr.ATC != '' AND rx_date <= NOW() AND "
-            "(DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW() "
-          "GROUP BY dr.demographic_no "
-          "HAVING COUNT(dr.regional_identifier) >= ")
-
-polypharmacy_without_prn = ("SELECT dr.demographic_no FROM drugs AS dr "
-          "WHERE dr.archived = 0 AND dr.prn IN (0) AND dr.regional_identifier IS NOT NULL AND "
-            "dr.regional_identifier != '' AND dr.ATC IS NOT NULL AND "
-            "dr.ATC != '' AND rx_date <= NOW() AND "
-            "(DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW() "
-          "GROUP BY dr.demographic_no "
-          "HAVING COUNT(DISTINCT dr.regional_identifier) >= ")
-
-
-polypharmacy_nonunique_without_prn = ("SELECT dr.demographic_no FROM drugs AS dr "
-          "WHERE dr.archived = 0 AND dr.prn IN (0) AND dr.regional_identifier IS NOT NULL AND "
-            "dr.regional_identifier != '' AND dr.ATC IS NOT NULL AND "
-            "dr.ATC != '' AND rx_date <= NOW() AND "
-            "(DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW() "
-          "GROUP BY dr.demographic_no "
-          "HAVING COUNT(dr.regional_identifier) >= ")
-
+without_prn = " AND dr.prn IN (0) "
+with_prn = ''
+distinct = "DISTINCT "
+not_distinct = ''
 
 target_group = ("SELECT d.demographic_no FROM demographic AS d WHERE d.patient_status = 'AC' AND "
           "CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) < "
-          "DATE_SUB( NOW(), INTERVAL 64 YEAR ) AND d.demographic_no = ")
+          "DATE_SUB( NOW(), INTERVAL 64 YEAR ) AND d.demographic_no = %s")
 
-without_prn = "without_prn"
-with_prn = "with_prn"
-unique = 'unique'
-not_unique = 'not_unique'
+def polypharmacy_string(without_prn_parm, distinct_parm):
+    result = []
+    result.append("SELECT dr.demographic_no FROM drugs AS dr ")
+    result.append("WHERE dr.archived = 0 ")
+    if without_prn_parm is without_prn:
+        result.append(without_prn)
+    result.append("AND dr.regional_identifier IS NOT NULL AND ")
+    result.append("dr.regional_identifier != '' AND dr.ATC IS NOT NULL AND ")
+    result.append("dr.ATC != '' AND rx_date <= NOW() AND ")
+    result.append("(DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW() ")
+    result.append("GROUP BY dr.demographic_no ")
+    result.append("HAVING COUNT(")
+    if distinct_parm == distinct:
+        result.append(distinct)
+    result.append("dr.regional_identifier) >= %s")
+    return ''.join(result)
 
-def print_result(cur, num_drugs, prn, unq):
+def print_result(cur, prn, distinct_parm, num_drugs):
     if prn is with_prn:
-        if unq is unique:
-            cur.execute(polypharmacy + str(num_drugs))
+        if distinct_parm is distinct:
+            cur.execute(polypharmacy_string(with_prn, distinct), str(num_drugs))
         else:
-            cur.execute(polypharmacy_nonunique + str(num_drugs))
+            cur.execute(polypharmacy_string(with_prn, not_distinct), str(num_drugs))
     else:
-        if unq is unique:
-            cur.execute(polypharmacy_without_prn + str(num_drugs))
+        if distinct_parm is distinct:
+            cur.execute(polypharmacy_string(without_prn, distinct), str(num_drugs))
         else:
-            cur.execute(polypharmacy_nonunique_without_prn + str(num_drugs))
+            cur.execute(polypharmacy_string(without_prn, not_distinct), str(num_drugs))
     rows = cur.fetchall()
 
     demoids = []
@@ -75,7 +58,7 @@ def print_result(cur, num_drugs, prn, unq):
 
     polycount = []
     for demoid in demoids:
-        cur.execute(target_group + demoid)
+        cur.execute(target_group, demoid) # prepared statement
         rows = cur.fetchall()
         for row in rows:
             polycount.append(row)
@@ -114,14 +97,14 @@ try:
     print "10 meds, without prn, unique"
 
     start_time = time.time()
-    print_result(cur, 5, with_prn, not_unique)
-    print_result(cur, 5, without_prn, not_unique)
-    print_result(cur, 5, with_prn, unique)
-    print_result(cur, 5, without_prn, unique)
-    print_result(cur, 10, with_prn, not_unique)
-    print_result(cur, 10, without_prn, not_unique)
-    print_result(cur, 10, with_prn, unique)
-    print_result(cur, 10, without_prn, unique)
+    print_result(cur, with_prn, not_distinct, 5)
+    print_result(cur, without_prn, not_distinct, 5)
+    print_result(cur, with_prn, distinct, 5)
+    print_result(cur, without_prn, distinct, 5)
+    print_result(cur, with_prn, not_distinct, 10)
+    print_result(cur, without_prn, not_distinct, 10)
+    print_result(cur, with_prn, distinct, 10)
+    print_result(cur, without_prn, distinct, 10)
     print
     print time.time() -  start_time, "seconds"
 
