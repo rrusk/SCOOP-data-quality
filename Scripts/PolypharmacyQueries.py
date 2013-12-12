@@ -13,30 +13,42 @@ import time
 con = None
 f = None
 
-without_prn = " AND dr.prn IN (0) "
+without_prn = " AND dr.prn IN (0)"
 with_prn = ''
-distinct = "DISTINCT "
+distinct = "DISTINCT"
 not_distinct = ''
+whole_population = 'whole_population'
+demo_id = ''
 
-target_group = ("SELECT d.demographic_no FROM demographic AS d WHERE d.patient_status = 'AC' AND "
-          "CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) < "
-          "DATE_SUB( NOW(), INTERVAL 64 YEAR ) AND d.demographic_no = %s")
+def target_group(pop=demo_id):
+    result = []
+    result.append("SELECT")
+    if pop is whole_population:
+        result.append(" COUNT(")
+    result.append(" d.demographic_no")
+    if pop is whole_population:
+        result.append(")")
+    result.append(" FROM demographic AS d WHERE d.patient_status = 'AC' AND")
+    result.append(" CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <")
+    result.append(" DATE_SUB( NOW(), INTERVAL 64 YEAR )")
+    if pop is demo_id:
+        result.append(" AND d.demographic_no = %s")
+    return ''.join(result)
 
 def polypharmacy_string(without_prn_parm, distinct_parm):
     result = []
-    result.append("SELECT dr.demographic_no FROM drugs AS dr ")
-    result.append("WHERE dr.archived = 0 ")
+    result.append("SELECT dr.demographic_no FROM drugs AS dr WHERE dr.archived = 0")
     if without_prn_parm is without_prn:
         result.append(without_prn)
-    result.append("AND dr.regional_identifier IS NOT NULL AND ")
-    result.append("dr.regional_identifier != '' AND dr.ATC IS NOT NULL AND ")
-    result.append("dr.ATC != '' AND rx_date <= NOW() AND ")
-    result.append("(DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW() ")
-    result.append("GROUP BY dr.demographic_no ")
-    result.append("HAVING COUNT(")
-    if distinct_parm == distinct:
+    result.append(" AND dr.regional_identifier IS NOT NULL AND dr.regional_identifier != '' ")
+    result.append(" AND dr.ATC IS NOT NULL AND dr.ATC != ''")
+    result.append(" AND rx_date <= NOW() AND")
+    result.append(" (DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW()")
+    result.append(" GROUP BY dr.demographic_no")
+    result.append(" HAVING COUNT(")
+    if distinct_parm is distinct:
         result.append(distinct)
-    result.append("dr.regional_identifier) >= %s")
+    result.append(" dr.regional_identifier) >= %s")
     return ''.join(result)
 
 def print_result(cur, prn, distinct_parm, num_drugs):
@@ -58,7 +70,7 @@ def print_result(cur, prn, distinct_parm, num_drugs):
 
     polycount = []
     for demoid in demoids:
-        cur.execute(target_group, demoid) # prepared statement
+        cur.execute(target_group(), demoid) # prepared statement
         rows = cur.fetchall()
         for row in rows:
             polycount.append(row)
@@ -87,15 +99,19 @@ try:
 
     cur = con.cursor()
 
-    print "5 meds, with prn, nonunique /"
-    print "5 meds, without prn, nonunique /"
-    print "5 meds, with prn, unique /"
-    print "5 meds, without prn, unique /"
-    print "10 meds, with prn, nonunique /"
-    print "10 meds, without prn, nonunique /"
-    print "10 meds, with prn, unique /"
-    print "10 meds, without prn, unique"
-
+    print "target population size:",
+    cur.execute(target_group(whole_population))
+    print cur.fetchone()[0]
+    print
+    print "5 meds, with prn, not distinct /"
+    print "5 meds, without prn, not distinct /"
+    print "5 meds, with prn, distinct /"
+    print "5 meds, without prn, distinct /"
+    print "10 meds, with prn, not distinct /"
+    print "10 meds, without prn, not distinct /"
+    print "10 meds, with prn, distinct /"
+    print "10 meds, without prn, distinct"
+    print
     start_time = time.time()
     print_result(cur, with_prn, not_distinct, 5)
     print_result(cur, without_prn, not_distinct, 5)
@@ -105,6 +121,7 @@ try:
     print_result(cur, without_prn, not_distinct, 10)
     print_result(cur, with_prn, distinct, 10)
     print_result(cur, without_prn, distinct, 10)
+    print
     print
     print time.time() -  start_time, "seconds"
 
