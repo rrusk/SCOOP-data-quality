@@ -6,9 +6,10 @@
 #
 __author__ = 'rrusk'
 
-import MySQLdb as mdb
+import os
 import sys
-import time
+
+import MySQLdb as mdb
 
 con = None
 f = None
@@ -38,23 +39,18 @@ def print_result(cursor, lo, hi, gender):
     cursor.execute(query_string(lo, hi, gender))
     print "%s" % str(cursor.fetchone()[0]).rjust(field_width),
 
-try:
-    from os.path import expanduser
-    home = expanduser("~")
+def read_config(filename):
+    home = os.path.expanduser("~")
 
+    with open(os.path.join(home, "mysql", "db_config", filename), "rb") as fh:
+        return fh.readline().rstrip()
+
+try:
     # configure database connection
-    f = open(home+'/mysql/db_config/db_user')
-    db_user = f.readline().rstrip('\n')
-    f.close()
-    f = open(home+'/mysql/db_config/db_passwd')
-    db_passwd = f.readline().rstrip('\n')
-    f.close()
-    f = open(home+'/mysql/db_config/db_name')
-    db_name = f.readline().rstrip('\n')
-    f.close()
-    f = open(home+'/mysql/db_config/db_port')
-    db_port = int(f.readline().rstrip('\n'))
-    f.close()
+    db_user = read_config("db_user")
+    db_passwd = read_config("db_passwd")
+    db_name = read_config("db_name")
+    db_port = int(read_config("db_port"))
 
     # connect to database
     con = mdb.connect(host='127.0.0.1', port=db_port, user=db_user, passwd=db_passwd, db=db_name)
@@ -78,14 +74,10 @@ try:
         print_result(cur, indx, indx+10, " not in ('M','F')")
         print("[" + str(indx) + ", " + str(indx+10) + ")")
 
-except mdb.Error, e:
-
+except mdb.Error as e:
     print "Error %d: %s" % (e.args[0], e.args[1])
     sys.exit(1)
 
 finally:
-
     if con:
         con.close()
-    if f:
-        f.close()
