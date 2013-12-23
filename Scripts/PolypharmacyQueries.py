@@ -6,9 +6,11 @@
 #
 __author__ = 'rrusk'
 
-import MySQLdb as mdb
+import os
 import sys
 import time
+
+import MySQLdb as mdb
 
 con = None
 f = None
@@ -23,22 +25,22 @@ demographic_id = None
 def target_group(pop=demographic_id):
     result = []
     result.append("SELECT")
-    if pop is whole_population:
+    if pop == whole_population:
         result.append(" COUNT(")
     result.append(" d.demographic_no")
-    if pop is whole_population:
+    if pop == whole_population:
         result.append(")")
     result.append(" FROM demographic AS d WHERE d.patient_status = 'AC' AND")
     result.append(" CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <")
     result.append(" DATE_SUB( NOW(), INTERVAL 64 YEAR )")
-    if pop is demographic_id:
+    if pop == demographic_id:
         result.append(" AND d.demographic_no = %s")
     return ''.join(result)
 
 def polypharmacy_string(without_prn_parm, distinct_parm):
     result = []
     result.append("SELECT dr.demographic_no FROM drugs AS dr WHERE dr.archived = 0")
-    if without_prn_parm is without_prn:
+    if without_prn_parm == without_prn:
         result.append(without_prn)
     result.append(" AND dr.regional_identifier IS NOT NULL AND dr.regional_identifier != '' ")
     result.append(" AND dr.ATC IS NOT NULL AND dr.ATC != ''")
@@ -46,19 +48,19 @@ def polypharmacy_string(without_prn_parm, distinct_parm):
     result.append(" (DATE_ADD(dr.rx_date, INTERVAL(DATEDIFF(dr.end_date,dr.rx_date)*1.2) DAY)) >= NOW()")
     result.append(" GROUP BY dr.demographic_no")
     result.append(" HAVING COUNT(")
-    if distinct_parm is distinct:
+    if distinct_parm == distinct:
         result.append(distinct)
     result.append(" dr.regional_identifier) >= %s")
     return ''.join(result)
 
 def print_result(cur, prn, distinct_parm, num_drugs):
-    if prn is with_prn:
-        if distinct_parm is distinct:
+    if prn == with_prn:
+        if distinct_parm == distinct:
             cur.execute(polypharmacy_string(with_prn, distinct), str(num_drugs))
         else:
             cur.execute(polypharmacy_string(with_prn, not_distinct), str(num_drugs))
     else:
-        if distinct_parm is distinct:
+        if distinct_parm == distinct:
             cur.execute(polypharmacy_string(without_prn, distinct), str(num_drugs))
         else:
             cur.execute(polypharmacy_string(without_prn, not_distinct), str(num_drugs))
@@ -76,23 +78,18 @@ def print_result(cur, prn, distinct_parm, num_drugs):
             polycount.append(row)
     print len(polycount),
 
-try:
-    from os.path import expanduser
-    home = expanduser("~")
+def read_config(filename):
+    home = os.path.expanduser("~")
 
+    with open(os.path.join(home, "mysql", "db_config", filename), "rb") as fh:
+        return fh.readline().rstrip()
+
+try:
     # configure database connection
-    f = open(home+'/mysql/db_config/db_user')
-    db_user = f.readline().rstrip('\n')
-    f.close()
-    f = open(home+'/mysql/db_config/db_passwd')
-    db_passwd = f.readline().rstrip('\n')
-    f.close()
-    f = open(home+'/mysql/db_config/db_name')
-    db_name = f.readline().rstrip('\n')
-    f.close()
-    f = open(home+'/mysql/db_config/db_port')
-    db_port = int(f.readline().rstrip('\n'))
-    f.close()
+    db_user = read_config("db_user")
+    db_passwd = read_config("db_passwd")
+    db_name = read_config("db_name")
+    db_port = int(read_config("db_port"))
 
     # connect to database
     con = mdb.connect(host='127.0.0.1', port=db_port, user=db_user, passwd=db_passwd, db=db_name)
@@ -125,14 +122,10 @@ try:
     print
     print time.time() -  start_time, "seconds"
 
-except mdb.Error, e:
-
+except mdb.Error as e:
     print "Error %d: %s" % (e.args[0], e.args[1])
     sys.exit(1)
 
 finally:
-
     if con:
         con.close()
-    if f:
-        f.close()
