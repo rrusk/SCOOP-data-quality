@@ -46,6 +46,8 @@ def get_patients(con):
             key += str(item)
 
         hashkey = hashlib.sha224(key).hexdigest()
+        print hashkey
+
         patients[hashkey].append((record[0], record[-1]))
 
     return patients
