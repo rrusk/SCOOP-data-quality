@@ -36,21 +36,21 @@ def get_patients(con):
     patients = collections.defaultdict(list)
 
     cur = con.cursor()
-    cur.execute("""SELECT demographic_no, last_name, first_name, year_of_birth, month_of_birth,
+    cur.execute("""SELECT demographic_no, hin, last_name, first_name, year_of_birth, month_of_birth,
                           date_of_birth, sex, patient_status
                    FROM demographic""")
 
     for record in cur.fetchall():
         hasher = hashlib.sha224()
 
-        for item in record[:-1]:
+        for item in record[1:-1]:
             if item is None:
                 continue
             
             hasher.update(str(item))
 
         hashkey = hasher.hexdigest()
-        print hashkey
+        #print hashkey
 
         patients[hashkey].append((record[0], record[-1]))
 
