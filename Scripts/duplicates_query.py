@@ -41,11 +41,12 @@ def get_patients(con):
                    FROM demographic""")
 
     for record in cur.fetchall():
-        key = ""
-        for item in record[:-1]:
-            key += str(item)
+        hasher = hashlib.sha224()
 
-        hashkey = hashlib.sha224(key).hexdigest()
+        for item in record[:-1]:
+            hasher.update(str(item))
+
+        hashkey = hasher.hexdigest()
         print hashkey
 
         patients[hashkey].append((record[0], record[-1]))
