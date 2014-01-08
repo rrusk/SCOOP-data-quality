@@ -34,10 +34,13 @@ def get_connection():
 
 def get_patients(con):
     patients = collections.defaultdict(list)
+
     cur = con.cursor()
-    for record in cur.execute("""SELECT demographic_no, last_name, first_name, year_of_birth, month_of_birth,
-                                 date_of_birth, sex, patient_status
-                                 FROM demographic"""):
+    cur.execute("""SELECT demographic_no, last_name, first_name, year_of_birth, month_of_birth,
+                          date_of_birth, sex, patient_status
+                   FROM demographic""")
+
+    for record in cur.fetchall():
         key = ""
         for item in record[:-1]:
             key += item
