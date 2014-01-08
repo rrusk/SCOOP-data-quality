@@ -43,7 +43,7 @@ def get_patients(con):
     for record in cur.fetchall():
         key = ""
         for item in record[:-1]:
-            key += item
+            key += str(item)
 
         hashkey = hashlib.sha224(key).hexdigest()
         patients[hashkey].append((record[0], record[-1]))
