@@ -44,6 +44,9 @@ def get_patients(con):
         hasher = hashlib.sha224()
 
         for item in record[:-1]:
+            if item is None:
+                continue
+            
             hasher.update(str(item))
 
         hashkey = hasher.hexdigest()
