@@ -63,6 +63,8 @@ def main():
         if con:
             con.close()
 
+    print "Total hashkeys: %d" % len(patients)
+
     for hashkey, patient_info in patients.iteritems():
         if len(patient_info) > 1:
             print "Collision for hashkey: %s." % hashkey
