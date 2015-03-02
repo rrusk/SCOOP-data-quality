@@ -3,7 +3,8 @@
  */
 // Title: What percentage of patients, calculated as active, has an invalid date of birth?
 // Description: DQ-DEM-03
-// Note: Checks for patients that are more than 120 years old or younger than yesterday.  A useful check to add would be that the patient was born before the first recorded encounter.
+// Note: Checks for patients that are more than 120 years old or younger than yesterday.
+// A potentially useful check to add would be that the patient was born before the first recorded encounter.
 
 function map(patient) {
 
@@ -63,7 +64,7 @@ function map(patient) {
         return false;
     }
 
-  // Checks for encounter before birthdate
+ /* // Checks for encounter before birthdate
   function hasInvalidEncounterDate(birthdate) {
       for (var i = 0; i < encounterList.length; i++) {
 	  if (encounterList[i].startDate() < birthdate) {
@@ -84,11 +85,11 @@ function map(patient) {
         }
       }
       return false;
-  }
+  }*/
 
   // Checks if patient is out of age range
   function incorrectAge() {
-     return (age < 0 || age > 120);// || hasInvalidEncounterDate(patient.birthtime()));
+     return (age === null || typeof age == 'undefined' || Number.isNaN(age) || age < 0 || age > 120);// || hasInvalidEncounterDate(patient.birthtime()));
   }
 
   emit('denominator', 0);

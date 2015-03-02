@@ -65,7 +65,7 @@ function map(patient) {
 
   // Checks if patient is out of age range
   function incorrectAge() {
-     return (age > 120);
+     return (age === null || typeof age === 'undefined' || Number.isNaN(age) || age > 120);
   }
 
   emit('denominator', 0);
