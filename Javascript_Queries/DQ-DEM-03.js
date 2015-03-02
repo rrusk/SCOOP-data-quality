@@ -29,13 +29,11 @@ function map(patient) {
 
   // Test that record is current (as of day before date at 0:00AM)
   function currentRecord(date) {
-    daybefore = new Date(date);
+    var daybefore = new Date(date);
     daybefore.setDate(daybefore.getDate() - 1);
     daybefore.setHours(0,0);
-    if (patient['json']['effective_time'] > daybefore/1000) {
-      return true;
-    }
-    return false;
+    return patient['json']['effective_time'] > daybefore / 1000;
+
   }
 
   // Checks for encounter between start and end dates
@@ -53,7 +51,7 @@ function map(patient) {
     function hadRxEncounter(startDate, endDate) {
         for (var i = 0; i < drugList.length; i++) {
             if (typeof drugList[i].orderInformation() !== 'undefined' &&
-                typeof drugList[i].orderInformation().length !== 0) {
+                typeof drugList[i].orderInformation().length != 0) {
                 for (var j = 0; j < drugList[i].orderInformation().length; j++) {
                     var drugPrescribed = drugList[i].orderInformation()[j].orderDateTime();
                     if (drugPrescribed >= startDate && drugPrescribed <= endDate) {
@@ -65,9 +63,32 @@ function map(patient) {
         return false;
     }
 
+  // Checks for encounter before birthdate
+  function hasInvalidEncounterDate(birthdate) {
+      for (var i = 0; i < encounterList.length; i++) {
+	  if (encounterList[i].startDate() < birthdate) {
+	      emit("e_d_no: " + patient["json"]["emr_demographics_primary_key"] + " edate: " + encounterList[i].startDate() + " birthdate: "+birthdate,1);
+              return true;
+	  }
+      }
+      for (var i = 0; i < drugList.length; i++) {
+	  if (typeof drugList[i].orderInformation() !== 'undefined' &&
+              typeof drugList[i].orderInformation().length != 0) {
+              for (var j = 0; j < drugList[i].orderInformation().length; j++) {
+		  var drugPrescribedDate = drugList[i].orderInformation()[j].orderDateTime();
+		  if (drugPrescribedDate < birthdate) {
+		      emit("rx_d_no: " + patient["json"]["emr_demographics_primary_key"],1);
+		      return true;
+		  }
+            }
+        }
+      }
+      return false;
+  }
+
   // Checks if patient is out of age range
   function incorrectAge() {
-     return (age < 0 || age > 120);
+     return (age < 0 || age > 120);// || hasInvalidEncounterDate(patient.birthtime()));
   }
 
   emit('denominator', 0);

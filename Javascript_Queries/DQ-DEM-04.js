@@ -29,13 +29,11 @@ function map(patient) {
 
   // Test that record is current (as of day before date at 0:00AM)
   function currentRecord(date) {
-    daybefore = new Date(date);
+    var daybefore = new Date(date);
     daybefore.setDate(daybefore.getDate() - 1);
     daybefore.setHours(0,0);
-    if (patient['json']['effective_time'] > daybefore/1000) {
-      return true;
-    }
-    return false;
+    return patient['json']['effective_time'] > daybefore / 1000;
+
   }
 
   // Checks for encounter between start and end dates
@@ -53,7 +51,7 @@ function map(patient) {
     function hadRxEncounter(startDate, endDate) {
         for (var i = 0; i < drugList.length; i++) {
             if (typeof drugList[i].orderInformation() !== 'undefined' &&
-                typeof drugList[i].orderInformation().length !== 0) {
+                typeof drugList[i].orderInformation().length != 0) {
                 for (var j = 0; j < drugList[i].orderInformation().length; j++) {
                     var drugPrescribed = drugList[i].orderInformation()[j].orderDateTime();
                     if (drugPrescribed >= startDate && drugPrescribed <= endDate) {
