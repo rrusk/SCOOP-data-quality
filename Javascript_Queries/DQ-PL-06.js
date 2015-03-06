@@ -11,7 +11,7 @@ function map(patient) {
     var drugList = patient.medications();
     var problemList = patient.conditions();
     var targetProblemCodes = {
-        "ICD9": ["274*"]
+        "ICD9": ["\\b274"]
     };
     var targetMedications = {
         "whoATC": ['M04AA01','M04AA03','M04AB01','M04AB02','M04AC01']
@@ -53,8 +53,17 @@ function map(patient) {
 
     }
 
-    // Checks for diabetic patients
+    // Checks for patients with DxCode
     function hasProblemCode(theDxCodes) {
+        /*list = problemList.regex_match(theDxCodes);
+        for (var i = 0; i < list.length; i++) {
+            emit(list[i]['json']['codes']['ICD9'], 1);
+        }
+        for (var i = 0; i < problemList.length; i++) {
+            if (problemList[i].regex_includesCodeFrom(theDxCodes)) {
+                emit(problemList[i]['json']['codes']['ICD9'], 1);
+            }
+        }*/
         return problemList.regex_match(theDxCodes).length;
     }
 

@@ -13,7 +13,7 @@ function map(patient) {
     var encounterList = patient.encounters();
     var problemList = patient.conditions();
     var targetProblemCodes = {
-        "ICD9": ["250*"]
+        "ICD9": ["\\b250"]
     };
 
     // Months are counted from 0 in Javascript so August is 7, for instance.
@@ -72,16 +72,29 @@ function map(patient) {
         return false;
     }
 
-    // Checks for diabetic patients
-    function hasProblemCode() {
-        return problemList.regex_match(targetProblemCodes).length;
+    // Checks for patients with DxCode
+    function hasProblemCode(theDxCodes) {
+        /*list = problemList.regex_match(theDxCodes);
+        for (var i = 0; i < list.length; i++) {
+            emit(list[i]['json']['codes']['ICD9'], 1);
+        }
+        for (var i = 0; i < problemList.length; i++) {
+            if (problemList[i].regex_includesCodeFrom(theDxCodes)) {
+                emit(problemList[i]['json']['codes']['ICD9'], 1);
+                if (problemList[i]['json']['codes']['ICD9'][0] != "244" &&
+                    problemList[i]['json']['codes']['ICD9'][0] != "245") {
+                    emit(problemList[i], 1);
+                }
+            }
+        }*/
+        return problemList.regex_match(theDxCodes).length;
     }
 
     emit('denominator', 0);
     emit('numerator', 0);
     if (currentRec && targetPopulation(age) && (hadEncounter(start, end) || hadRxEncounter(start, end))) {
         emit('denominator', 1);
-        if (hasProblemCode()) {
+        if (hasProblemCode(targetProblemCodes)) {
             emit('numerator', 1);
         }
     }

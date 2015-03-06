@@ -11,7 +11,7 @@ function map(patient) {
     var drugList = patient.medications();
     var problemList = patient.conditions();
     var targetProblemCodes = {
-        "ICD9": ["4912*", "492*", "496*"]
+        "ICD9": ["\\b4912", "\\b492", "\\b496"]
     };
     var targetMedications = {
         "whoATC": ['R03BB04']
@@ -53,12 +53,21 @@ function map(patient) {
 
     }
 
-    // Checks for diabetic patients
+    // Checks for patients with DxCode
     function hasProblemCode(theDxCodes) {
+        /*list = problemList.regex_match(theDxCodes);
+        for (var i = 0; i < list.length; i++) {
+            emit(list[i]['json']['codes']['ICD9'], 1);
+        }
+        for (var i = 0; i < problemList.length; i++) {
+            if (problemList[i].regex_includesCodeFrom(theDxCodes)) {
+                emit(problemList[i]['json']['codes']['ICD9'], 1);
+            }
+        }*/
         return problemList.regex_match(theDxCodes).length;
     }
 
-    // Uses statusOfMedication to determine if drug is current.
+ // Uses statusOfMedication to determine if drug is current.
     // Active if, when E2E record was exported, medication was long-term or before end date.
     // Test only makes sense for current records.
     function isActiveDrug(drug) {
