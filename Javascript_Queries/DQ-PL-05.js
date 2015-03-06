@@ -16,6 +16,10 @@ function map(patient) {
     var targetMedications = {
         "whoATC": ['H03AA01', 'H03AA02', 'H03AA05']
     };
+    var targetMedications2 = {
+        "whoATC": ['\\bH03AA']
+
+    };
 
     var durationMultiplier = 1.2;
     var prnMultiplier = 2.0;
@@ -103,8 +107,26 @@ function map(patient) {
         return false;
     }
 
+    function hasTargetMed(takenDrugs, theTargetDrugs) {
+        list = takenDrugs.regex_match(theTargetDrugs);
+        for (var i = 0; i < list.length; i++) {
+            if (isActiveDrug(list[i]) || isDrugInWindow(list[i])) {
+                //emit(list[i]['json']['codes']['whoATC'], 1);
+                return true;
+            }
+        }
+        return false
+    }
+
     emit('denominator', 0);
     emit('numerator', 0);
+    if (currentRec && hasTargetMed(drugList, targetMedications2)) {
+        emit('denominator2', 1);
+        if (hasProblemCode(targetProblemCodes)) {
+            emit('numerator2', 1);
+        }
+    }
+
     if (currentRec && hasCurrentTargetMedication(drugList, targetMedications)) {
         emit('denominator', 1);
         if (hasProblemCode(targetProblemCodes)) {

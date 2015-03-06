@@ -16,6 +16,9 @@ function map(patient) {
     var targetMedications = {
         "whoATC": ['M04AA01','M04AA03','M04AB01','M04AB02','M04AC01']
     };
+    var targetMedications2 = {
+        "whoATC": ['\\bM04A']
+    };
 
     var durationMultiplier = 1.2;
     var prnMultiplier = 2.0;
@@ -103,8 +106,49 @@ function map(patient) {
         return false;
     }
 
+
+    function hasTargetMed(takenDrugs, theTargetDrugs) {
+        var list = takenDrugs.regex_match(theTargetDrugs);
+        for (var i = 0; i < list.length; i++) {
+            if (isActiveDrug(list[i]) || isDrugInWindow(list[i])) {
+                /*emit(list[i]['json']['codes']['whoATC'], 1);
+                var num1 = list[i]['json']['start_time'];
+                var num2 = list[i]['json']['end_time'];
+                var d1 = new Date(num1*1000);
+                var d2 = new Date(num2*1000);
+                var status = list[i]['json']['statusOfMedication']['value'];
+                if (isPRN(list[i])) {
+                    status=status+" isPRN";
+                }
+                if(isDrugInWindow(list[i])) {
+                    status=status+" in window";
+                }
+                emit(""+status+" " +d1+","+d2, 1);*/
+                return true;
+            }
+        }
+        /*for (var i = 0; i < takenDrugs.length; i++) {
+            if (takenDrugs[i].includesCodeFrom(list)) {
+                if (isActiveDrug(takenDrugs[i]) || isDrugInWindow(takenDrugs[i])) {
+                    var obj = JSON.stringify(takenDrugs[i]);
+                    var type = typeof obj;
+                    emit(type, 1);
+                    return true;
+                }
+            }
+        }*/
+        return false;
+    }
+
     emit('denominator', 0);
     emit('numerator', 0);
+    if (currentRec && hasTargetMed(drugList, targetMedications2)) {
+        emit('denominator2', 1);
+        if (hasProblemCode(targetProblemCodes)) {
+            emit('numerator2', 1);
+        }
+    }
+
     if (currentRec && hasCurrentTargetMedication(drugList, targetMedications)) {
         emit('denominator', 1);
         if (hasProblemCode(targetProblemCodes)) {
