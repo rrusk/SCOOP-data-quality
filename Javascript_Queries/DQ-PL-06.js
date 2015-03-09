@@ -14,9 +14,6 @@ function map(patient) {
         "ICD9": ["\\b274"]
     };
     var targetMedications = {
-        "whoATC": ['M04AA01','M04AA03','M04AB01','M04AB02','M04AC01']
-    };
-    var targetMedications2 = {
         "whoATC": ['\\bM04A']
     };
 
@@ -94,20 +91,8 @@ function map(patient) {
         return (endDateOffset(drugStart, drugEnd, m) >= end && drugStart <= end);
     }
 
-    // Check for medications
+    // Check for current medications
     function hasCurrentTargetMedication(takenDrugs, theTargetDrugs) {
-        for (var i = 0; i < takenDrugs.length; i++) {
-            if (takenDrugs[i].includesCodeFrom(theTargetDrugs)) {
-                if (isActiveDrug(takenDrugs[i]) || isDrugInWindow(takenDrugs[i])) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-
-    function hasTargetMed(takenDrugs, theTargetDrugs) {
         var list = takenDrugs.regex_match(theTargetDrugs);
         for (var i = 0; i < list.length; i++) {
             if (isActiveDrug(list[i]) || isDrugInWindow(list[i])) {
@@ -142,12 +127,6 @@ function map(patient) {
 
     emit('denominator', 0);
     emit('numerator', 0);
-    if (currentRec && hasTargetMed(drugList, targetMedications2)) {
-        emit('denominator2', 1);
-        if (hasProblemCode(targetProblemCodes)) {
-            emit('numerator2', 1);
-        }
-    }
 
     if (currentRec && hasCurrentTargetMedication(drugList, targetMedications)) {
         emit('denominator', 1);
