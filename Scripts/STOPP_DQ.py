@@ -8,7 +8,6 @@ __author__ = 'rrusk'
 
 import os
 import sys
-from datetime import date
 import datetime
 
 # if import MySQLdb fails (for Ubuntu 14.04.1) run 'sudo apt-get install python-mysqldb'
@@ -72,9 +71,11 @@ def get_provider_no(cursor, first_name, last_name):
     return result
 
 
-def calculate_age(byear, bmonth, bday):
-    today = date.today()
-    return today.year - int(byear) - ((today.month, today.day) < (int(bmonth), int(bday)))
+def calculate_age(byear, bmonth, bday, ref_date):
+    # today = date.today()
+    sdate = ref_date
+    # return today.year - int(byear) - ((today.month, today.day) < (int(bmonth), int(bday)))
+    return sdate.year - int(byear) - ((sdate.month, sdate.day) < (int(bmonth), int(bday)))
 
 
 def had_encounter(elist, estart, eend):
@@ -91,11 +92,39 @@ def had_echart_encounter(elist, estart, eend):
     return False
 
 
+def had_rx_encounter(elist, estart, eend):
+    for encounter in elist:
+        if estart <= encounter[2] <= eend:
+            return True
+    return False
+
+
 def read_config(filename):
     home = os.path.expanduser("~")
 
     with open(os.path.join(home, "mysql", "db_config", filename), "rb") as fh:
         return fh.readline().rstrip()
+
+
+def mdict(mlist):
+    d = {}
+    for item in mlist:
+        d[item[0]] = item
+    return d
+
+
+# Oscar's default year_of_birth is '0001' so consider age > 150 invalid
+# ref_date is date on which age is to be calculated
+def age_over(ddict, ref_date, check_status=True):
+    dcnt = 0
+    for dkey in ddict:
+        dno = ddict[dkey]
+        include = True
+        if check_status and dno[5] != 'AC':
+            include = False
+        if include and (65 <= calculate_age(dno[1], dno[2], dno[3], ref_date) <= 150):
+            dcnt += 1
+    return dcnt
 
 
 try:
@@ -105,20 +134,31 @@ try:
     db_name = read_config("db_name")
     db_port = int(read_config("db_port"))
 
+    start = datetime.date.fromordinal(datetime.date.today().toordinal() - 121)
+    end = datetime.date.fromordinal(datetime.date.today().toordinal() - 1)
+
     # connect to database
     con = Mdb.connect(host='127.0.0.1', port=db_port, user=db_user, passwd=db_passwd, db=db_name)
 
     cur = con.cursor()
 
     print("Demographics")
-    demo_list = get_demographics(cur)
-    print("Number of patients: " + str(len(demo_list)))
+    demo_dict = mdict(get_demographics(cur))
+    print("Number of patients: " + str(len(demo_dict)))
     cnt = 0
-    for row in demo_list:
-        if calculate_age(row[1], row[2], row[3]) > 120:
+    for key in demo_dict:
+        row = demo_dict[key]
+        if calculate_age(row[1], row[2], row[3], start) > 120:
             cnt += 1
+            print(str(row))
     if cnt > 0:
         print("Number of patient > 120 years: " + str(cnt))
+
+    print("Number of patients >= 65: " + str(age_over(demo_dict, start)) + " at start")
+    d17900d = demo_dict[17900]
+    print("17900: " + str(d17900d))
+    print "Age of demo_no=17900:",
+    print(str(calculate_age(d17900d[1], d17900d[2], d17900d[3], start)))
 
     print("Drugs")
     drug_list = get_drugs(cur, "17900")
@@ -137,10 +177,12 @@ try:
     print(len(echart_list))
 
     print("Had encounter in window")
-    start = datetime.date.fromordinal(datetime.date.today().toordinal()-121)
-    end = datetime.date.fromordinal(datetime.date.today().toordinal()-1)
-    print("hadEncounter: "+str(had_encounter(encounter_list, start, end)))
-    print("had eChart Encounter: "+str(had_echart_encounter(echart_list, start, end)))
+
+    print("hadEncounter: " + str(had_encounter(encounter_list, start, end)))
+    print("had eChart Encounter: " + str(had_echart_encounter(echart_list, start, end)))
+    drug_list = get_drugs(cur, "17900")
+    print("Number of drug prescriptions: " + str(len(drug_list)))
+    print("had rx Encounter: " + str(had_rx_encounter(drug_list, start, end)))
 
 except Mdb.Error as e:
     print("Error %d: %s" % (e.args[0], e.args[1]))
