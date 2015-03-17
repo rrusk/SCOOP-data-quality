@@ -8,6 +8,7 @@ __author__ = 'rrusk'
 
 import os
 import sys
+import csv
 import datetime
 from datetime import date
 
@@ -17,7 +18,22 @@ import MySQLdb as Mdb
 con = None
 f = None
 
-field_width = 5
+
+def create_dict_of_demographic_nos(mlist):
+    mdict = {}
+    for mrow in mlist:
+        mdict[mrow[0]] = mrow[1:]
+    return mdict
+
+
+def create_dict_by_demographic_no(mlist):
+    mdict = {}
+    for mlist_row in mlist:
+        if mlist_row[0] in mdict:
+            mdict[mlist_row[0]].append(mlist_row[1:])
+        else:
+            mdict[mlist_row[0]] = [mlist_row[1:]]
+    return mdict
 
 
 def get_demographics(cursor):
@@ -25,21 +41,15 @@ def get_demographics(cursor):
               FROM demographic d"""
     cursor.execute(query)
     result = cursor.fetchall()
-    return result
+    return create_dict_of_demographic_nos(result)
 
 
 def get_drugs(cursor, archived=False):
     query = """select d.demographic_no, d.ATC, d.regional_identifier as DIN, d.rx_date, d.end_date, d.long_term,
-               d.lastUpdateDate, d.prn from drugs d where d.archived=%s"""
+               d.lastUpdateDate, d.prn, d.provider_no from drugs d where d.archived=%s"""
     cursor.execute(query, archived)
     result = cursor.fetchall()
-    drugs_dict = {}
-    for d_row in result:
-        if d_row[0] in drugs_dict:
-            drugs_dict[d_row[0]].append(d_row[1:])
-        else:
-            drugs_dict[d_row[0]] = [d_row[1:]]
-    return drugs_dict
+    return create_dict_by_demographic_no(result)
 
 
 def get_dxresearch(cursor):
@@ -47,7 +57,7 @@ def get_dxresearch(cursor):
                where dx.status != 'D' and dx.coding_system='icd9'"""
     cursor.execute(query)
     result = cursor.fetchall()
-    return result
+    return create_dict_by_demographic_no(result)
 
 
 def get_encounters(cursor):
@@ -59,25 +69,7 @@ def get_encounters(cursor):
                order by cmn.observation_date"""
     cursor.execute(query)
     result = cursor.fetchall()
-    encounter_dict = {}
-    for d_row in result:
-        if d_row[0] in encounter_dict:
-            encounter_dict[d_row[0]].append(d_row[1:])
-        else:
-            encounter_dict[d_row[0]] = [d_row[1:]]
-    return encounter_dict
-
-
-# def get_encounters2(cursor, demographic_no):
-#     query = """select cmn.update_date, cmn.observation_date, cmn.provider_no, cmn.signing_provider_no
-#                from casemgmt_note cmn
-#                where cmn.demographic_no = %s and cmn.provider_no!=-1
-#                and cmn.note_id =
-#                (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
-#                order by cmn.observation_date"""
-#     cursor.execute(query, demographic_no)
-#     result = cursor.fetchall()
-#     return result
+    return create_dict_by_demographic_no(result)
 
 
 def get_echart(cursor, demographic_no):
@@ -88,33 +80,56 @@ def get_echart(cursor, demographic_no):
     return result
 
 
-def get_provider_no(cursor, first_name, last_name):
-    query = """SELECT p.provider_no
-              FROM provider p where p.first_name = %s and p.last_name = %s"""
-    cursor.execute(query, (first_name, last_name))
+def get_providers(cursor):
+    query = """SELECT p.provider_no, p.first_name, p.last_name from provider p"""
+    cursor.execute(query)
     result = cursor.fetchall()
     return result
 
 
+def get_study_provider_list(csv_file):
+    provider_list = []
+    home = os.path.expanduser("~")
+    with open(os.path.join(home, "mysql", "db_config", csv_file), 'rb') as cf:
+        reader = csv.reader(cf, delimiter='|')
+        for cf_row in reader:
+            provider_list.append((cf_row[0].strip(), cf_row[1].strip()))
+    return provider_list
+
+
+def get_provider_nums(provider_list, study_provider_list):
+    pnums_list = []
+    for p in study_provider_list:
+        for provider in provider_list:
+            if provider[1].strip() == p[0].strip() and provider[2].strip() == p[1].strip():
+                pnums_list.append(provider[0].strip())
+    return pnums_list
+
+
 def calculate_age(byear, bmonth, bday, ref_date=None):
+    if byear is None or bmonth is None or bday is None:
+        return None
     sdate = ref_date
     if sdate is None:
         sdate = date.today()
     return sdate.year - int(byear) - ((sdate.month, sdate.day) < (int(bmonth), int(bday)))
 
 
-def get_problems(plist, demographic_no):
-    result = []
-    for problem in plist:
-        if problem[0] == demographic_no:
-            result.append(problem[1:])
-    return result
-
-
 def had_encounter(elist, estart, eend):
     for encounter in elist:
         if estart <= encounter[1].date() <= eend:
             return True
+    return False
+
+
+def had_provider_encounter(elist, plist, estart, eend):
+    if elist is None:
+        return False
+    for encounter in elist:
+        for p_no in plist:
+            if encounter[3] == p_no:
+                if estart <= encounter[1].date() <= eend:
+                    return True
     return False
 
 
@@ -126,9 +141,22 @@ def had_echart_encounter(elist, estart, eend):
 
 
 def had_rx_encounter(elist, estart, eend):
+    if elist is None:
+        return False
     for encounter in elist:
         if estart <= encounter[2] <= eend:
             return True
+    return False
+
+
+def had_rx_provider_encounter(med_list, plist, estart, eend):
+    if med_list is None:
+        return False
+    for prescription_encounter in med_list:
+        for p_no in plist:
+            if prescription_encounter[7] == p_no:
+                if estart <= prescription_encounter[2] <= eend:
+                    return True
     return False
 
 
@@ -136,9 +164,22 @@ def had_rx_encounter(elist, estart, eend):
 def has_code(item_list, codes):
     prefix_list = [code.strip().upper() for code in codes]
     prefixes = tuple(prefix_list)
+    if item_list is None:
+        return False
     for item in item_list:
-        if item[0].strip().upper().startswith(prefixes):
+        if item[0] is not None and item[0].strip().upper().startswith(prefixes):
             return True
+    return False
+
+
+def has_current_target_medication(med_list, codes, med_start, med_end):
+    prefix_list = [code.strip().upper() for code in codes]
+    prefixes = tuple(prefix_list)
+    for med in med_list:
+        if med[0] is not None and med[0].strip().upper().startswith(prefixes):
+            if (med[4] == 1) or (med_start <= med[2] <= med_end):
+                # print("med: " + str(med))
+                return True
     return False
 
 
@@ -149,13 +190,6 @@ def read_config(filename):
         return fh.readline().rstrip()
 
 
-def mdict(mlist):
-    d = {}
-    for item in mlist:
-        d[item[0]] = item
-    return d
-
-
 # Oscar's default year_of_birth is '0001' so consider age > 150 invalid
 # ref_date is date on which age is to be calculated
 # Currently, Oscar E2E exports only include patients with 'AC' status.
@@ -164,10 +198,10 @@ def elderly(ddict, ref_date, check_status=True):
     for dkey in ddict:
         dno = ddict[dkey]
         include = True
-        if check_status and dno[5] != 'AC':
+        if check_status and dno[4] != 'AC':
             include = False
-        if include and (65 <= calculate_age(dno[1], dno[2], dno[3], ref_date) <= 150):
-            result[dno[0]] = dno
+        if include and (65 <= calculate_age(dno[0], dno[1], dno[2], ref_date) <= 150):
+            result[dkey] = dno
     return result
 
 
@@ -178,6 +212,10 @@ try:
     db_name = read_config("db_name")
     db_port = int(read_config("db_port"))
 
+    study_providers = get_study_provider_list("providers.csv")
+
+    print("provider_list " + str(study_providers))
+
     start = datetime.date.fromordinal(datetime.date.today().toordinal() - 121)
     end = datetime.date.fromordinal(datetime.date.today().toordinal() - 1)
 
@@ -186,79 +224,106 @@ try:
 
     cur = con.cursor()
 
+    print("Providers:")
+    providers = get_providers(cur)
+    provider_nos = get_provider_nums(providers, study_providers)
+    print("provider_nos: " + str(provider_nos))
+
     print("Demographics:")
-    demo_dict = mdict(get_demographics(cur))
+    demo_dict = get_demographics(cur)
     print("  Number of patients: " + str(len(demo_dict)))
     cnt = 0
     for key in demo_dict:
         row = demo_dict[key]
-        if calculate_age(row[1], row[2], row[3], start) > 120:
+        if calculate_age(row[0], row[1], row[2], start) > 120:
             cnt += 1
             print("  Patient > 120 years: " + str(row))
     if cnt > 0:
         print("  Number of patient > 120 years: " + str(cnt))
 
+    elderly_patients = elderly(demo_dict, start)
     print("  Number of patients >= 65 on " + str(start) + ": " + str(len(elderly(demo_dict, start))))
 
     print "  Age of demographic_no = 17900: ",
     d17900 = demo_dict[17900]
-    print(str(calculate_age(d17900[1], d17900[2], d17900[3], start)))
+    print(str(calculate_age(d17900[0], d17900[1], d17900[2], start)))
     print("    17900: " + str(d17900))
-
+    #
     print("Drugs:")
     all_drugs = get_drugs(cur)
-    drug_list = all_drugs[17900]
-    print(len(drug_list))
-    if len(drug_list) >= 16:
-        print("  Drug: " + str(drug_list[15]))
-    print("had target drug: " + str(has_code(drug_list, [" c07ab "])))
-
+    print("Size of drugs: " + str(len(all_drugs)))
+    # drug_list = all_drugs[17900]
+    # print(len(drug_list))
+    # if len(drug_list) >= 16:
+    # print("  Drug: " + str(drug_list[15]))
+    # print("had target drug: " + str(has_code(drug_list, [" c07ab "])))
+    #
     print("Problems:")
     all_problems = get_dxresearch(cur)
     print("Size of dxresearch: " + str(len(all_problems)))
-    problem_list = get_problems(all_problems, 17900)
-    print(len(problem_list))
-    if len(problem_list) > 0:
-        print("  Problem: " + str(problem_list[0]))
-    print("had target problem: " + str(has_code(problem_list, [" V5861"])))
-
+    # problem_list = get_problems(all_problems, 17900)
+    # print(len(problem_list))
+    # if len(problem_list) > 0:
+    # print("  Problem: " + str(problem_list[0]))
+    # print("had target problem: " + str(has_code(problem_list, [" V5861"])))
+    #
     print("Encounters:")
     enc_dict = get_encounters(cur)
-    print(len(enc_dict))
-    encounter_list = enc_dict["17900"]
-    print(len(encounter_list))
-
-    print("eChart Encounters:")
-    echart_list = get_echart(cur, "17900")
-    print(len(echart_list))
-
-    print("Had encounter in window:")
-
-    print("hadEncounter: " + str(had_encounter(encounter_list, start, end)))
-    print("had eChart Encounter: " + str(had_echart_encounter(echart_list, start, end)))
-    drug_list = all_drugs[17900]
-    print("Number of drug prescriptions: " + str(len(drug_list)))
-    print("had rx Encounter: " + str(had_rx_encounter(drug_list, start, end)))
+    print("Size of encounter list: " + str(len(enc_dict)))
+    # encounter_list = enc_dict["17900"]
+    # print(len(encounter_list))
+    #
+    # print("eChart Encounters:")
+    # echart_list = get_echart(cur, "17900")
+    # print(len(echart_list))
+    #
+    # print("Had encounter in window:")
+    # print("hadEncounter: " + str(had_encounter(encounter_list, start, end)))
+    # print("had eChart Encounter: " + str(had_echart_encounter(echart_list, start, end)))
+    # drug_list = all_drugs[17900]
+    # print("Number of drug prescriptions: " + str(len(drug_list)))
+    # print("had rx Encounter: " + str(had_rx_encounter(drug_list, start, end)))
 
     print("Testing STOPP Rule A03:")
     dx_codes = ["401"]
     any_drugs = ["C03C"]
     notany_drugs = ["C03AA", "C07A", "C08", "C09"]
-    elderly_dict = elderly(demo_dict, start)
     elderly_dx = {}
-    for key in elderly_dict:
-        row = elderly_dict[key]
-        if has_code(get_problems(all_problems, row[0]), dx_codes):
-            elderly_dx[row[0]] = row
+    for key in elderly_patients:
+        row = elderly_patients[key]
+        default = None
+        if has_code(all_problems.get(key, default), dx_codes):
+            # has_code(get_problems(all_problems, row[0]), dx_codes):
+            elderly_dx[key] = row
     print("Number of elderly with condition(s) " + str(dx_codes) + ": " + str(len(elderly_dx)))
     elderly_dx_enc = {}
+    elderly_dx_drug_enc = {}
     for key in elderly_dx:
         row = elderly_dx[key]
-        encounter_list = enc_dict[str(row[0])]
-        if had_encounter(encounter_list, start, end):
-            elderly_dx_enc[row[0]] = row
-    print("Number of elderly with condition(s) " + str(dx_codes) + " seen in last 4 months: "
+        default = None
+        encounter_list = enc_dict.get(key, default)
+        drug_list = all_drugs.get(key, default)
+        if had_provider_encounter(encounter_list, provider_nos, start, end) or had_rx_provider_encounter(drug_list,
+                                                                                                         provider_nos,
+                                                                                                         start, end):
+            elderly_dx_enc[key] = row
+            if drug_list is not None and has_current_target_medication(drug_list, any_drugs, start,
+                                                                       end) and not has_current_target_medication(
+                    drug_list, notany_drugs, start, end):
+                elderly_dx_drug_enc[key] = row
+                print("matches all: " + str(key))
+    print("Number of elderly with condition(s) " + str(dx_codes) + " seen by study provider in last 4 months: "
           + str(len(elderly_dx_enc)))
+    print("Number of elderly with condition(s) " + str(dx_codes) + " on " + str(any_drugs) + " and not on " +
+          str(notany_drugs) + " seen by study provider in last 4 months: " + str(len(elderly_dx_drug_enc)))
+
+    for key in elderly_dx_drug_enc:
+        row = elderly_dx_drug_enc[key]
+        encounter_list = enc_dict.get(key, default)
+        drug_list = all_drugs.get(key, default)
+        print("key: " + str(key))
+        # print("drugs: " + str(drug_list))
+        #print("encounter: " + str(encounter_list))
 
 
 except Mdb.Error as e:
