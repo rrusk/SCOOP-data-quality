@@ -15,6 +15,9 @@ from datetime import date
 # if import MySQLdb fails (for Ubuntu 14.04.1) run 'sudo apt-get install python-mysqldb'
 import MySQLdb as Mdb
 
+# if import dateutil.relativedelta fails run 'sudo apt-get install python-dateutil'
+from dateutil.relativedelta import relativedelta
+
 con = None
 f = None
 
@@ -145,9 +148,9 @@ def had_provider_encounter(elist, plist, estart, eend):
     if elist is None:
         return False
     for encounter in elist:
-        for p_no in plist:
-            if encounter[2] == p_no:
-                if estart <= encounter[1].date() <= eend:
+        if estart <= encounter[1].date() <= eend:
+            for p_no in plist:
+                if encounter[2] == p_no:
                     return True
     return False
 
@@ -162,25 +165,14 @@ def had_echart_encounter(elist, estart, eend):
 
 
 # takes the drugs list for a specific demographic_no and checks whether any prescriptions were made
-# between start and end dates indicating an encounter must have occurred
-def had_rx_encounter(med_list, estart, eend):
-    if med_list is None:
-        return False
-    for prescription_encounter in med_list:
-        if estart <= prescription_encounter[2] <= eend:
-            return True
-    return False
-
-
-# takes the drugs list for a specific demographic_no and checks whether any prescriptions were made
 # between start and end dates indicating an encounter with a study provider must have occurred
 def had_rx_provider_encounter(med_list, plist, estart, eend):
     if med_list is None:
         return False
     for prescription_encounter in med_list:
-        for p_no in plist:
-            if prescription_encounter[7] == p_no:
-                if estart <= prescription_encounter[2] <= eend:
+        if estart <= prescription_encounter[2] <= eend:
+            for p_no in plist:
+                if prescription_encounter[7] == p_no:
                     return True
     return False
 
@@ -205,7 +197,7 @@ def has_current_target_medication(med_list, codes, med_end):  # med_start, med_e
     prefixes = tuple(prefix_list)
     for med in med_list:
         if med[0] is not None and med[0].strip().upper().startswith(prefixes):
-            if (med[4] == 1) or (med[3] >= med_end):  # (med[2] <= med_end and med[3] >= med_start):
+            if (med[4] == 1) or (med[2] <= med_end <= med[3]):
                 return True
     return False
 
@@ -245,8 +237,8 @@ try:
 
     print("provider_list " + str(study_providers))
 
-    start = datetime.date.fromordinal(datetime.date.today().toordinal() - 121)
-    end = datetime.date.fromordinal(datetime.date.today().toordinal() - 1)
+    end = datetime.date.fromordinal(datetime.date.today().toordinal() - 1)  # yesterday
+    start = end + relativedelta(months=-4)  # four months ago
 
     # connect to database
     con = Mdb.connect(host='127.0.0.1', port=db_port, user=db_user, passwd=db_passwd, db=db_name)
@@ -289,8 +281,8 @@ try:
     # print(
     # "had target drug matching c03aa, c07a, c08, c09: " + str(
     # has_code(drug_list, ["C03AA", "C07A", "C08", "C09"])))
-    #     print("had target drug matching in window c03aa, c07a, c08, c09: " + str(
-    #         has_current_target_medication(drug_list, ["C03AA", "C07A", "C08", "C09"], start, end)))
+    # print("had target drug matching in window c03aa, c07a, c08, c09: " + str(
+    # has_current_target_medication(drug_list, ["C03AA", "C07A", "C08", "C09"], start, end)))
     # #
     print("Problems:")
     all_problems = get_dxresearch(cur)
@@ -298,7 +290,7 @@ try:
     # problem_list = all_problems[17757]
     # print(len(problem_list))
     # if len(problem_list) > 0:
-    #     print("  Problem: " + str(problem_list[0]))
+    # print("  Problem: " + str(problem_list[0]))
     #     print("had target problem 401: " + str(has_code(problem_list, [" 401"])))
     #
     print("Encounters:")
@@ -448,6 +440,7 @@ try:
         default = None
         if has_code(all_drugs.get(key_i02, default), any_drugs_i02):
             elderly_drug_i02[key_i02] = row_i02
+    print("Total number of elderly: " + str(len(elderly_patients)))
     print("Number of elderly on " + str(any_drugs_i02) + ": " + str(len(elderly_drug_i02)))
     elderly_drug_enc_i02 = {}
     elderly_drug_notany_drug_enc_i02 = {}
@@ -456,14 +449,15 @@ try:
         default = None
         encounter_list_i02 = enc_dict.get(key_i02, default)
         drug_list_i02 = all_drugs.get(key_i02, default)
-        if had_provider_encounter(encounter_list_i02, provider_nos, start, end) or had_rx_provider_encounter(
+        if has_current_target_medication(drug_list_i02, any_drugs_i02, end) and (had_provider_encounter(
+                encounter_list_i02, provider_nos, start, end) or had_rx_provider_encounter(
                 drug_list_i02,
                 provider_nos,
-                start, end):
+                start, end)):
             elderly_drug_enc_i02[key_i02] = row_i02
             if not has_current_target_medication(drug_list_i02, notany_drugs_i02, end):
                 elderly_drug_notany_drug_enc_i02[key_i02] = row_i02
-                print("matches all: " + str(key_i02))
+                # print("matches all: " + str(key_i02))
     print("Number of elderly on " + str(any_drugs_i02) + " seen by study provider in last 4 months: "
           + str(len(elderly_drug_enc_i02)))
     print("Number of elderly on " + str(any_drugs_i02) + " and not on " +
@@ -474,9 +468,9 @@ try:
         row_i02 = elderly_drug_notany_drug_enc_i02[key_i02]
         encounter_list_i02 = enc_dict.get(key_i02, default)
         drug_list_i02 = all_drugs.get(key_i02, default)
-        print("key: " + str(key_i02))
-        print("  drugs: " + str(len(drug_list_i02)))
-        print("  encounter: " + str(len(encounter_list_i02)))
+        print("key: " + str(key_i02)),
+        print("\tdrugs: " + str(len(drug_list_i02))),
+        print("\tencounter: " + str(len(encounter_list_i02)))
 
     print("\n\nTesting STOPP Rule X99:")
     dx_codes_X99 = ["401"]
