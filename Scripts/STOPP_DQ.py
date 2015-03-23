@@ -241,14 +241,18 @@ def print_stats(problem_dict, drug_dict, encounter_dict, numerator_dict):
         else:
             print("\t  problems: " + str(len(problem_dict.get(key, default)))),
         print("\t  drugs: " + str(len(drug_list))),
-        print("\t  encounter: " + str(len(encounter_list)))
+        if encounter_list is None:
+            print("\t  encounter: 0")
+        else:
+            print("\t  encounter: " + str(len(encounter_list)))
 
 
 # Denominator includes elderly patients with dxcodes from anyproblem_list.
 # Numerator includes patients selected from denominator with any drug from anydrug_list and
-#   no drug from notanydrug_list.
-def anydx_anydr_notanydr(patient_dict, problem_dict, drug_dict, encounter_dict, anyproblem_list, anydrug_list,
-                         notanydrug_list, provider_list, study_start, study_end):
+# no drug from notanydrug_list.
+def d_anyproblem_n_anydrug_notanydrug(patient_dict, problem_dict, drug_dict, encounter_dict, anyproblem_list,
+                                      anydrug_list,
+                                      notanydrug_list, provider_list, study_start, study_end):
     elderly_dx = {}
     for key in patient_dict:
         row = patient_dict[key]
@@ -281,7 +285,7 @@ def anydx_anydr_notanydr(patient_dict, problem_dict, drug_dict, encounter_dict, 
 
 # Denominator includes elderly patients.
 # Numerator includes patients selected from denominator with any drug from anydrug_list.
-def anydr(patient_dict, drug_dict, encounter_dict, anydrug_list, provider_list, study_start, study_end):
+def d_n_anydrug(patient_dict, drug_dict, encounter_dict, anydrug_list, provider_list, study_start, study_end):
     print("Number of elderly patients: " + str(len(patient_dict)))
     elderly_enc = {}
     elderly_drug_enc = {}
@@ -305,8 +309,8 @@ def anydr(patient_dict, drug_dict, encounter_dict, anydrug_list, provider_list, 
 
 # Denominator includes elderly patients with any drug from anydrug_list.
 # Numerator includes patients selected from denominator with no problem from notanyproblem_list.
-def anydr_notanydx(patient_dict, problem_dict, drug_dict, encounter_dict, anydrug_list, notanyproblem_list,
-                   provider_list, study_start, study_end):
+def d_anydrug_n_notanyproblem(patient_dict, problem_dict, drug_dict, encounter_dict, anydrug_list, notanyproblem_list,
+                              provider_list, study_start, study_end):
     elderly_drug = {}
     for key in patient_dict:
         row = patient_dict[key]
@@ -331,16 +335,15 @@ def anydr_notanydx(patient_dict, problem_dict, drug_dict, encounter_dict, anydru
                 elderly_notany_dx_drug_enc[key] = row
     print("Number of elderly patients on " + str(anydrug_list) +
           " seen by study provider in last 4 months: " + str(len(elderly_drug_enc)))
-    line2print = "Number of elderly without condition(s) " + str(
-        notanyproblem_list) + " seen by study provider in last 4 months: " + str(len(elderly_notany_dx_drug_enc))
-    print(line2print)
-    print_stats(problem_dict, drug_dict, encounter_dict, elderly_drug_enc)
+    print("Number of elderly on " + str(anydrug_list) + " without condition(s) " + str(notanyproblem_list)),
+    print(" seen by study provider in last 4 months: " + str(len(elderly_notany_dx_drug_enc)))
+    print_stats(problem_dict, drug_dict, encounter_dict, elderly_notany_dx_drug_enc)
 
 
 # Denominator includes elderly patients with any drug from anydrug_list.
 # Numerator includes patients selected from denominator with no drug from notanydrug_list.
-def anydr_notanydr(patient_dict, problem_dict, drug_dict, encounter_dict, anydrug_list, notanydrug_list,
-                   provider_list, study_start, study_end):
+def d_anydrug_n_notanydrug(patient_dict, problem_dict, drug_dict, encounter_dict, anydrug_list, notanydrug_list,
+                           provider_list, study_start, study_end):
     elderly_drug = {}
     for key in patient_dict:
         row = patient_dict[key]
@@ -427,29 +430,37 @@ try:
     all_encounters_dict = get_encounters(cur)
     print("Size of encounter list: " + str(len(all_encounters_dict)))
 
-    print("Testing STOPP Rule A03:")
+    print("\n\nTesting STOPP Rule A02:")
+    any_drugs = ["C03C"]
+    notanydx_list = ["401", "402", "404", "405", "428", "39891", "7895", "5712", "5715", "5716", "581", "V1303", "5853",
+                     "5854", "5855", "5856", "5859", "585", "586", "5184"]
+    d_anydrug_n_notanyproblem(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs,
+                              notanydx_list, provider_nos, start, end)
+
+    print("\n\nTesting STOPP Rule A03:")
     dx_codes = ["401"]
     any_drugs = ["C03C"]
     notany_drugs = ["C03AA", "C07A", "C08", "C09"]
-    anydx_anydr_notanydr(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, dx_codes, any_drugs,
-                         notany_drugs, provider_nos, start, end)
+    d_anyproblem_n_anydrug_notanydrug(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, dx_codes,
+                                      any_drugs,
+                                      notany_drugs, provider_nos, start, end)
 
     print("\n\nTesting STOPP Rule test B07:")
     any_drugs = ["N03AE01", "N05BA02", "N05BA05", "N05BA01", "N05CD01", "N05CD03", "N05CD08", "N05CD02"]
-    anydr(elderly_patients_dict, all_drugs_dict, all_encounters_dict, any_drugs, provider_nos, start, end)
+    d_n_anydrug(elderly_patients_dict, all_drugs_dict, all_encounters_dict, any_drugs, provider_nos, start, end)
 
     print("\n\nTesting STOPP Rule B08:")
     any_drugs = ["N05A", "N06C"]
     notanydx_list = ["295", "297", "298"]
-    anydr_notanydx(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs,
-                   notanydx_list, provider_nos, start, end)
+    d_anydrug_n_notanyproblem(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs,
+                              notanydx_list, provider_nos, start, end)
 
     print("\n\nTesting STOPP Rule I02:")
     any_drugs = ["N02A"]
     notany_drugs = ["A06A"]
-    anydr_notanydr(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs, notany_drugs,
-                   provider_nos,
-                   start, end)
+    d_anydrug_n_notanydrug(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs, notany_drugs,
+                           provider_nos,
+                           start, end)
 
 except Mdb.Error as e:
     print("Error %d: %s" % (e.args[0], e.args[1]))
