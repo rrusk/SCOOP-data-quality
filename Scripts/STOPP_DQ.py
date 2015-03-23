@@ -188,10 +188,10 @@ def had_rx_provider_encounter(med_list, plist, estart, eend):
 # checks whether list has specific codes.  Uses prefix matching.
 # Assumes code is first field in item_list
 def has_code(item_list, codes):
-    prefix_list = [code.strip().upper() for code in codes]
-    prefixes = tuple(prefix_list)
     if item_list is None:
         return False
+    prefix_list = [code.strip().upper() for code in codes]
+    prefixes = tuple(prefix_list)
     for item in item_list:
         if item[0] is not None and item[0].strip().upper().startswith(prefixes):
             return True
@@ -285,10 +285,10 @@ try:
     # print(len(drug_list))
     # if len(drug_list) >= 14:
     # print("  Drug: " + str(drug_list[13]))
-    #     print("had target drug matching c03c: " + str(has_code(drug_list, [" C03C "])))
-    #     print(
-    #         "had target drug matching c03aa, c07a, c08, c09: " + str(
-    #             has_code(drug_list, ["C03AA", "C07A", "C08", "C09"])))
+    # print("had target drug matching c03c: " + str(has_code(drug_list, [" C03C "])))
+    # print(
+    # "had target drug matching c03aa, c07a, c08, c09: " + str(
+    # has_code(drug_list, ["C03AA", "C07A", "C08", "C09"])))
     #     print("had target drug matching in window c03aa, c07a, c08, c09: " + str(
     #         has_current_target_medication(drug_list, ["C03AA", "C07A", "C08", "C09"], start, end)))
     # #
@@ -362,21 +362,13 @@ try:
         print("  drugs: " + str(len(drug_list_a03)))
         print("  encounter: " + str(len(encounter_list_a03)))
 
-    print("Testing STOPP Rule B07:")
-    dx_codes_b07 = ["401"]
-    any_drugs_b07 = ["C03C"]
-    notany_drugs_b07 = ["C03AA", "C07A", "C08", "C09"]
-    elderly_dx_b07 = {}
+    print("\n\nTesting STOPP Rule B07:")
+    any_drugs_b07 = ["N03AE01", "N05BA02", "N05BA05", "N05BA01", "N05CD01", "N05CD03", "N05CD08", "N05CD02"]
+    print("Number of elderly patients: " + str(len(elderly_patients)))
+    elderly_enc_b07 = {}
+    elderly_drug_enc_b07 = {}
     for key_b07 in elderly_patients:
         row_b07 = elderly_patients[key_b07]
-        default = None
-        if has_code(all_problems.get(key_b07, default), dx_codes_b07):
-            elderly_dx_b07[key_b07] = row_b07
-    print("Number of elderly with condition(s) " + str(dx_codes_b07) + ": " + str(len(elderly_dx_b07)))
-    elderly_dx_enc_b07 = {}
-    elderly_dx_drug_enc_b07 = {}
-    for key_b07 in elderly_dx_b07:
-        row_b07 = elderly_dx_b07[key_b07]
         default = None
         encounter_list_b07 = enc_dict.get(key_b07, default)
         drug_list_b07 = all_drugs.get(key_b07, default)
@@ -384,25 +376,150 @@ try:
                 drug_list_b07,
                 provider_nos,
                 start, end):
-            elderly_dx_enc_b07[key_b07] = row_b07
+            elderly_enc_b07[key_b07] = row_b07
             if drug_list_b07 is not None and has_current_target_medication(drug_list_b07, any_drugs_b07,
-                                                                           end) and not has_current_target_medication(
-                    drug_list_b07, notany_drugs_b07, end):
-                elderly_dx_drug_enc_b07[key_b07] = row_b07
+                                                                           end):
+                elderly_drug_enc_b07[key_b07] = row_b07
                 print("matches all: " + str(key_b07))
-    print("Number of elderly with condition(s) " + str(dx_codes_b07) + " seen by study provider in last 4 months: "
-          + str(len(elderly_dx_enc_b07)))
-    print("Number of elderly with condition(s) " + str(dx_codes_b07) + " on " + str(any_drugs_b07) + " and not on " +
-          str(notany_drugs_b07) + " seen by study provider in last 4 months: " + str(len(elderly_dx_drug_enc_b07)))
+    print("Number of elderly patients seen by study provider in last 4 months: "
+          + str(len(elderly_enc_b07)))
+    print("Number of elderly patients on " + str(any_drugs_b07) +
+          " seen by study provider in last 4 months: " + str(len(elderly_drug_enc_b07)))
 
-    for key_b07 in elderly_dx_drug_enc_b07:
-        row_b07 = elderly_dx_drug_enc_b07[key_b07]
+    for key_b07 in elderly_drug_enc_b07:
+        row_b07 = elderly_drug_enc_b07[key_b07]
         encounter_list_b07 = enc_dict.get(key_b07, default)
         drug_list_b07 = all_drugs.get(key_b07, default)
         print("key: " + str(key_b07))
-        print("  problems: " + str(len(all_problems.get(key_b07, default))))
         print("  drugs: " + str(len(drug_list_b07)))
         print("  encounter: " + str(len(encounter_list_b07)))
+
+    print("\n\nTesting STOPP Rule B08:")
+    notany_dx_codes_b08 = ["295", "297", "298"]
+    any_drugs_b08 = ["N05A", "N06C"]
+    elderly_notany_dx_b08 = {}
+    elderly_drug_b08 = {}
+    for key_b08 in elderly_patients:
+        row_b08 = elderly_patients[key_b08]
+        default = None
+        drug_list_b08 = all_drugs.get(key_b08, default)
+        if drug_list_b08 is not None and has_current_target_medication(drug_list_b08, any_drugs_b08, end):
+            elderly_drug_b08[key_b08] = row_b08
+    print("Number of elderly on " + str(any_drugs_b08) + ": " + str(len(elderly_drug_b08)))
+    elderly_drug_enc_b08 = {}
+    elderly_notany_dx_drug_enc_b08 = {}
+    for key_b08 in elderly_drug_b08:
+        row_b08 = elderly_drug_b08[key_b08]
+        default = None
+        encounter_list_b08 = enc_dict.get(key_b08, default)
+        drug_list_b08 = all_drugs.get(key_b08, default)
+        if had_provider_encounter(encounter_list_b08, provider_nos, start, end) or had_rx_provider_encounter(
+                drug_list_b08,
+                provider_nos,
+                start, end):
+            elderly_drug_enc_b08[key_b08] = row_b08
+            if not has_code(all_problems.get(key_b08, default), notany_dx_codes_b08):
+                elderly_notany_dx_drug_enc_b08[key_b08] = row_b08
+                print("matches all: " + str(key_b08))
+    print("Number of elderly patients on " + str(any_drugs_b08) +
+          " seen by study provider in last 4 months: " + str(len(elderly_drug_enc_b08)))
+    line2print = "Number of elderly without condition(s) " + str(
+        notany_dx_codes_b08) + " seen by study provider in last 4 months: " + str(len(elderly_notany_dx_drug_enc_b08))
+    print(line2print)
+
+    for key_b08 in elderly_notany_dx_drug_enc_b08:
+        row_b08 = elderly_notany_dx_drug_enc_b08[key_b08]
+        encounter_list_b08 = enc_dict.get(key_b08, default)
+        drug_list_b08 = all_drugs.get(key_b08, default)
+        print("key: " + str(key_b08))
+        if all_problems.get(key_b08, default) is None:
+            print("  problems: None")
+        else:
+            print("  problems: " + str(len(all_problems.get(key_b08, default))))
+        print("  drugs: " + str(len(drug_list_b08)))
+        print("  encounter: " + str(len(encounter_list_b08)))
+
+    print("\n\nTesting STOPP Rule I02:")
+    any_drugs_i02 = ["N02A"]
+    notany_drugs_i02 = ["A06A"]
+    elderly_drug_i02 = {}
+    for key_i02 in elderly_patients:
+        row_i02 = elderly_patients[key_i02]
+        default = None
+        if has_code(all_drugs.get(key_i02, default), any_drugs_i02):
+            elderly_drug_i02[key_i02] = row_i02
+    print("Number of elderly on " + str(any_drugs_i02) + ": " + str(len(elderly_drug_i02)))
+    elderly_drug_enc_i02 = {}
+    elderly_drug_notany_drug_enc_i02 = {}
+    for key_i02 in elderly_drug_i02:
+        row_i02 = elderly_drug_i02[key_i02]
+        default = None
+        encounter_list_i02 = enc_dict.get(key_i02, default)
+        drug_list_i02 = all_drugs.get(key_i02, default)
+        if had_provider_encounter(encounter_list_i02, provider_nos, start, end) or had_rx_provider_encounter(
+                drug_list_i02,
+                provider_nos,
+                start, end):
+            elderly_drug_enc_i02[key_i02] = row_i02
+            if not has_current_target_medication(drug_list_i02, notany_drugs_i02, end):
+                elderly_drug_notany_drug_enc_i02[key_i02] = row_i02
+                print("matches all: " + str(key_i02))
+    print("Number of elderly on " + str(any_drugs_i02) + " seen by study provider in last 4 months: "
+          + str(len(elderly_drug_enc_i02)))
+    print("Number of elderly on " + str(any_drugs_i02) + " and not on " +
+          str(notany_drugs_i02) + " seen by study provider in last 4 months: " + str(
+        len(elderly_drug_notany_drug_enc_i02)))
+
+    for key_i02 in elderly_drug_notany_drug_enc_i02:
+        row_i02 = elderly_drug_notany_drug_enc_i02[key_i02]
+        encounter_list_i02 = enc_dict.get(key_i02, default)
+        drug_list_i02 = all_drugs.get(key_i02, default)
+        print("key: " + str(key_i02))
+        print("  drugs: " + str(len(drug_list_i02)))
+        print("  encounter: " + str(len(encounter_list_i02)))
+
+    print("\n\nTesting STOPP Rule X99:")
+    dx_codes_X99 = ["401"]
+    any_drugs_X99 = ["C03C"]
+    notany_drugs_X99 = ["C03AA", "C07A", "C08", "C09"]
+    elderly_dx_X99 = {}
+    for key_X99 in elderly_patients:
+        row_X99 = elderly_patients[key_X99]
+        default = None
+        if has_code(all_problems.get(key_X99, default), dx_codes_X99):
+            elderly_dx_X99[key_X99] = row_X99
+    print("Number of elderly with condition(s) " + str(dx_codes_X99) + ": " + str(len(elderly_dx_X99)))
+    elderly_dx_enc_X99 = {}
+    elderly_dx_drug_enc_X99 = {}
+    for key_X99 in elderly_dx_X99:
+        row_X99 = elderly_dx_X99[key_X99]
+        default = None
+        encounter_list_X99 = enc_dict.get(key_X99, default)
+        drug_list_X99 = all_drugs.get(key_X99, default)
+        if had_provider_encounter(encounter_list_X99, provider_nos, start, end) or had_rx_provider_encounter(
+                drug_list_X99,
+                provider_nos,
+                start, end):
+            elderly_dx_enc_X99[key_X99] = row_X99
+            if drug_list_X99 is not None and has_current_target_medication(drug_list_X99, any_drugs_X99,
+                                                                           end) and not has_current_target_medication(
+                    drug_list_X99, notany_drugs_X99, end):
+                elderly_dx_drug_enc_X99[key_X99] = row_X99
+                print("matches all: " + str(key_X99))
+    print("Number of elderly with condition(s) " + str(dx_codes_X99) + " seen by study provider in last 4 months: "
+          + str(len(elderly_dx_enc_X99)))
+    print("Number of elderly with condition(s) " + str(dx_codes_X99) + " on " + str(any_drugs_X99) + " and not on " +
+          str(notany_drugs_X99) + " seen by study provider in last 4 months: " + str(len(elderly_dx_drug_enc_X99)))
+
+    for key_X99 in elderly_dx_drug_enc_X99:
+        row_X99 = elderly_dx_drug_enc_X99[key_X99]
+        encounter_list_X99 = enc_dict.get(key_X99, default)
+        drug_list_X99 = all_drugs.get(key_X99, default)
+        print("key: " + str(key_X99))
+        print("  problems: " + str(len(all_problems.get(key_X99, default))))
+        print("  drugs: " + str(len(drug_list_X99)))
+        print("  encounter: " + str(len(encounter_list_X99)))
+
 
 except Mdb.Error as e:
     print("Error %d: %s" % (e.args[0], e.args[1]))
