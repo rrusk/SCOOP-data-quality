@@ -260,8 +260,8 @@ def d_anyproblem_n_anydrug_notanydrug(patient_dict, problem_dict, drug_dict, enc
         if has_code(problem_dict.get(key, default), anyproblem_list):
             elderly_dx[key] = row
     print("Number of elderly with condition(s) " + str(anyproblem_list) + ": " + str(len(elderly_dx)))
-    elderly_dx_enc = {}
-    elderly_dx_drug_enc = {}
+    denominator_dict = {}
+    numerator_dict = {}
     for key in elderly_dx:
         row = elderly_dx[key]
         default = None
@@ -271,24 +271,24 @@ def d_anyproblem_n_anydrug_notanydrug(patient_dict, problem_dict, drug_dict, enc
                 drug_list,
                 provider_list,
                 study_start, study_end):
-            elderly_dx_enc[key] = row
+            denominator_dict[key] = row
             if drug_list is not None and has_current_target_medication(drug_list, anydrug_list,
                                                                        study_end) and not has_current_target_medication(
                     drug_list, notanydrug_list, study_end):
-                elderly_dx_drug_enc[key] = row
+                numerator_dict[key] = row
     print("Number of elderly with condition(s) " + str(anyproblem_list) + " seen by study provider in last 4 months: "
-          + str(len(elderly_dx_enc)))
+          + str(len(denominator_dict)))
     print("Number of elderly with condition(s) " + str(anyproblem_list) + " on " + str(anydrug_list) + " and not on " +
-          str(notanydrug_list) + " seen by study provider in last 4 months: " + str(len(elderly_dx_drug_enc)))
-    print_stats(problem_dict, drug_dict, encounter_dict, elderly_dx_drug_enc)
+          str(notanydrug_list) + " seen by study provider in last 4 months: " + str(len(numerator_dict)))
+    print_stats(problem_dict, drug_dict, encounter_dict, numerator_dict)
 
 
 # Denominator includes elderly patients.
 # Numerator includes patients selected from denominator with any drug from anydrug_list.
 def d_n_anydrug(patient_dict, drug_dict, encounter_dict, anydrug_list, provider_list, study_start, study_end):
     print("Number of elderly patients: " + str(len(patient_dict)))
-    elderly_enc = {}
-    elderly_drug_enc = {}
+    denominator_dict = {}
+    numerator_dict = {}
     for key in patient_dict:
         row = patient_dict[key]
         default = None
@@ -298,13 +298,13 @@ def d_n_anydrug(patient_dict, drug_dict, encounter_dict, anydrug_list, provider_
                 drug_list,
                 provider_list,
                 study_start, study_end):
-            elderly_enc[key] = row
+            denominator_dict[key] = row
             if drug_list is not None and has_current_target_medication(drug_list, anydrug_list, study_end):
-                elderly_drug_enc[key] = row
-    print("Number of elderly patients seen by study provider in last 4 months: " + str(len(elderly_enc)))
+                numerator_dict[key] = row
+    print("Number of elderly patients seen by study provider in last 4 months: " + str(len(denominator_dict)))
     print("Number of elderly patients on " + str(anydrug_list) +
-          " seen by study provider in last 4 months: " + str(len(elderly_drug_enc)))
-    print_stats(None, drug_dict, encounter_dict, elderly_drug_enc)
+          " seen by study provider in last 4 months: " + str(len(numerator_dict)))
+    print_stats(None, drug_dict, encounter_dict, numerator_dict)
 
 
 # Denominator includes elderly patients with any drug from anydrug_list.
@@ -319,8 +319,8 @@ def d_anydrug_n_notanyproblem(patient_dict, problem_dict, drug_dict, encounter_d
         if drug_list is not None and has_current_target_medication(drug_list, anydrug_list, study_end):
             elderly_drug[key] = row
     print("Number of elderly on " + str(anydrug_list) + ": " + str(len(elderly_drug)))
-    elderly_drug_enc = {}
-    elderly_notany_dx_drug_enc = {}
+    demoninator_dict = {}
+    numerator_dict = {}
     for key in elderly_drug:
         row = elderly_drug[key]
         default = None
@@ -330,14 +330,14 @@ def d_anydrug_n_notanyproblem(patient_dict, problem_dict, drug_dict, encounter_d
                 drug_list,
                 provider_list,
                 study_start, study_end):
-            elderly_drug_enc[key] = row
+            demoninator_dict[key] = row
             if not has_code(problem_dict.get(key, default), notanyproblem_list):
-                elderly_notany_dx_drug_enc[key] = row
+                numerator_dict[key] = row
     print("Number of elderly patients on " + str(anydrug_list) +
-          " seen by study provider in last 4 months: " + str(len(elderly_drug_enc)))
+          " seen by study provider in last 4 months: " + str(len(demoninator_dict)))
     print("Number of elderly on " + str(anydrug_list) + " without condition(s) " + str(notanyproblem_list)),
-    print(" seen by study provider in last 4 months: " + str(len(elderly_notany_dx_drug_enc)))
-    print_stats(problem_dict, drug_dict, encounter_dict, elderly_notany_dx_drug_enc)
+    print(" seen by study provider in last 4 months: " + str(len(numerator_dict)))
+    print_stats(problem_dict, drug_dict, encounter_dict, numerator_dict)
 
 
 # Denominator includes elderly patients with any drug from anydrug_list.
@@ -352,8 +352,8 @@ def d_anydrug_n_notanydrug(patient_dict, problem_dict, drug_dict, encounter_dict
             elderly_drug[key] = row
     print("Total number of elderly: " + str(len(patient_dict)))
     print("Number of elderly on " + str(anydrug_list) + ": " + str(len(elderly_drug)))
-    elderly_drug_enc = {}
-    elderly_drug_notany_drug_enc = {}
+    denominator_dict = {}
+    numerator_dict = {}
     for key in elderly_drug:
         row = elderly_drug[key]
         default = None
@@ -364,15 +364,15 @@ def d_anydrug_n_notanydrug(patient_dict, problem_dict, drug_dict, encounter_dict
                 drug_list,
                 provider_list,
                 study_start, study_end)):
-            elderly_drug_enc[key] = row
+            denominator_dict[key] = row
             if not has_current_target_medication(drug_list, notanydrug_list, study_end):
-                elderly_drug_notany_drug_enc[key] = row
+                numerator_dict[key] = row
     print("Number of elderly on " + str(anydrug_list) + " seen by study provider in last 4 months: "
-          + str(len(elderly_drug_enc)))
+          + str(len(denominator_dict)))
     print("Number of elderly on " + str(anydrug_list) + " and not on " +
           str(notanydrug_list) + " seen by study provider in last 4 months: " + str(
-        len(elderly_drug_notany_drug_enc)))
-    print_stats(problem_dict, drug_dict, encounter_dict, elderly_drug_notany_drug_enc)
+        len(numerator_dict)))
+    print_stats(problem_dict, drug_dict, encounter_dict, numerator_dict)
 
 
 try:
