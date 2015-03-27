@@ -191,6 +191,17 @@ def has_code(item_list, codes):
     return False
 
 
+# check whether patient has active status
+def is_active(demographic_dict, demographic_no):
+    default = None
+    result = demographic_dict.get(demographic_no, default)
+    if result is None:
+        print("demographic_no missing from demographics: " + str(demographic_no))
+        return False
+    else:
+        return result[4] == 'AC'
+
+
 # checks whether the medication list has a code corresponding to specific medications
 # returns true if the medication is long term or hasn't yet reached its end date.
 def has_current_target_medication(med_list, codes, med_end):  # med_start, med_end):
@@ -211,6 +222,14 @@ def read_config(filename):
         return fh.readline().rstrip()
 
 
+def active_patients(ddict):
+    result = {}
+    for dkey in ddict:
+        if is_active(ddict, dkey):
+            result[dkey] = ddict[dkey]
+    return result
+
+
 # Create a demographics dictionary of patients >= 65 years.
 # Oscar's default year_of_birth is '0001' so consider age > 150 invalid
 # ref_date is date on which age is to be calculated
@@ -220,10 +239,20 @@ def elderly(ddict, ref_date, check_status=True):
     for dkey in ddict:
         dno = ddict[dkey]
         include = True
-        if check_status and dno[4] != 'AC':
+        if check_status and not is_active(ddict, dkey):
             include = False
         if include and (65 <= calculate_age(dno[0], dno[1], dno[2], ref_date) <= 15000):
             result[dkey] = dno
+    return result
+
+
+# Create a drugs dictionary for active patients.
+# Currently, Oscar E2E exports only include patients with 'AC' status.
+def relevant_drugs(demographic_dict, drug_dict):
+    result = {}
+    for dkey in drug_dict:
+        if is_active(demographic_dict, dkey):
+            result[dkey] = drug_dict[dkey]
     return result
 
 
@@ -375,6 +404,12 @@ def d_anydrug_n_notanydrug(patient_dict, problem_dict, drug_dict, encounter_dict
     print_stats(problem_dict, drug_dict, encounter_dict, numerator_dict)
 
 
+def sum_dict_values(the_dict):
+    item_cnt = 0
+    for the_key in the_dict:
+        item_cnt += len(the_dict[the_key])
+    return item_cnt
+
 try:
     # configure database connection
     db_user = read_config("db_user")
@@ -401,24 +436,71 @@ try:
 
     print("Demographics:")
     all_patients_dict = get_demographics(cur)
-    print("  Number of patients: " + str(len(all_patients_dict)))
-    cnt = 0
+    print("  Total number of patient records: " + str(len(all_patients_dict)))
+    print("    Should be consistent with")
+    print("      select count(demographic_no) from demographic;")
+
+    active_patients_dict = active_patients(all_patients_dict)
+    print("  Number of active patients: " + str(len(active_patients_dict)))
+    print("    Should be consistent with")
+    print("      select count(demographic_no) from demographic where patient_status='AC';")
+
+    cnt_all_patients = 0
+    cnt_ac_patients = 0
     for d_key in all_patients_dict:
         d_row = all_patients_dict[d_key]
-        if calculate_age(d_row[0], d_row[1], d_row[2], start) > 120:
-            cnt += 1
-            print("  Patient > 120 years: " + str(d_row))
-    if cnt > 0:
-        print("  Number of patient > 120 years: " + str(cnt))
+        if calculate_age(d_row[0], d_row[1], d_row[2], start) > 150:
+            cnt_all_patients += 1
+            if is_active(all_patients_dict, d_key):
+                cnt_ac_patients += 1
+
+    print("  Number of patient > 150 years: " + str(cnt_all_patients))
+    print("    Should be consistent with ")
+    print("      SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d ")
+    print("      WHERE CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth )"),
+    print("<= DATE_SUB(NOW(), INTERVAL 150 YEAR);")
+
+    print("  Number of active patient > 150 years: " + str(cnt_ac_patients))
+    print("    Should be consistent with ")
+    print("      SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d ")
+    print("      WHERE d.patient_status = 'AC' ")
+    print("      AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth )"),
+    print("<= DATE_SUB(NOW(), INTERVAL 150 YEAR);")
 
     elderly_patients_dict = elderly(all_patients_dict, start)
     print(
         "  Number of patients >= 65 on " + str(start) + ": " + str(len(elderly(all_patients_dict, start))))
 
     #
-    print("Drugs:")
+    print("\nDrugs:")
     all_drugs_dict = get_drugs(cur)
-    print("Size of drugs: " + str(len(all_drugs_dict)))
+    print("Number of patients with medication list: " + str(len(all_drugs_dict)))
+    print("Total number of non-archived drugs in drugs table: " + str(sum_dict_values(all_drugs_dict)))
+    print("  Should match output from")
+    print("    select count(*) from drugs where archived!=1;")
+
+    considered_drugs_dict = relevant_drugs(all_patients_dict, all_drugs_dict)
+    print("Number of active patients with medication list: " + str(len(considered_drugs_dict)))
+
+    #
+    print("Total number of non-archived drugs for active patients: "),
+    cnt_all = 0
+    cnt_lt = 0
+    for d_key in considered_drugs_dict:
+        d_arr = considered_drugs_dict[d_key]
+        for d_elem in d_arr:
+            cnt_all += 1
+            if d_elem[4] == 1:
+                cnt_lt += 1
+    print(str(cnt_all))
+    print("Should match output from")
+    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")"
+    print("  where dr.archived!=1 and de.patient_status='AC';")
+    print("Number of Long-Term Meds in Drugs table for active patients: "),
+    print(str(cnt_lt))
+    print("Should match output from")
+    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")"
+    print("  where dr.archived!=1 and de.patient_status='AC' and dr.long_term=True;")
 
     #
     print("Problems:")
