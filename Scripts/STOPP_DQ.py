@@ -55,7 +55,8 @@ def get_demographics(cursor):
 # value = [ATC, DIN, rx_date, end_date, long_term, lastUpdateDate, prn, provider_no]
 def get_drugs(cursor, archived=False):
     query = """select d.demographic_no, d.ATC, d.regional_identifier as DIN, d.rx_date, d.end_date, d.long_term,
-               d.lastUpdateDate, d.prn, d.provider_no from drugs d where d.archived=%s"""
+               d.lastUpdateDate, d.prn, d.provider_no from drugs d where d.archived=%s order by d.demographic_no asc,
+               DIN asc, d.end_date desc, d.long_term desc"""
     cursor.execute(query, archived)
     result = cursor.fetchall()
     return create_dict_by_demographic_no(result)
@@ -103,6 +104,20 @@ def get_providers(cursor):
     return result
 
 
+# get elderly patients with active status who were 65 years as of 4 months ago yesterday using direct SQL query
+def get_elderly_count_4months_ago(cursor):
+    query = """SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
+               WHERE d.patient_status = 'AC' AND d.year_of_birth is not NULL
+               AND d.month_of_birth is not NULL AND d.date_of_birth is not NULL
+               AND d.month_of_birth >= 1 AND d.month_of_birth <= 12
+               AND d.date_of_birth >= 1 AND d.date_of_birth <= 31
+               AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=
+               DATE_SUB( DATE_SUB(DATE_SUB(NOW(), INTERVAL 1 DAY), INTERVAL 4 MONTH), INTERVAL 65 YEAR);"""
+    cursor.execute(query)
+    result = cursor.fetchall()
+    return int(result[0][0])
+
+
 # reads csv file containing study providers listed row by row using first_name|last_name
 def get_study_provider_list(csv_file):
     provider_list = []
@@ -124,9 +139,16 @@ def get_provider_nums(provider_list, study_provider_list):
     return pnums_list
 
 
+# checks if birthdate is potentially valid
+def is_valid_birthdate(byear, bmonth, bday):
+    if byear is None or bmonth is None or bday is None or bmonth < 1 or bmonth > 12 or bday < 1 or bday > 31:
+        return False
+    return True
+
+
 # calculates patient age at the ref_date which defaults to today
 def calculate_age(byear, bmonth, bday, ref_date=None):
-    if byear is None or bmonth is None or bday is None:
+    if not is_valid_birthdate(byear, bmonth, bday):
         return None
     sdate = ref_date
     if sdate is None:
@@ -178,6 +200,17 @@ def had_rx_provider_encounter(med_list, plist, estart, eend):
     return False
 
 
+# takes the drugs list for a specific demographic_no and checks whether any prescriptions were made
+# between start and end dates indicating an encounter must have occurred
+def had_rx_encounter(med_list, estart, eend):
+    if med_list is None:
+        return False
+    for prescription_encounter in med_list:
+        if estart <= prescription_encounter[2] <= eend:
+            return True
+    return False
+
+
 # checks whether list has specific codes.  Uses prefix matching.
 # Assumes code is first field in item_list
 def has_code(item_list, codes):
@@ -214,6 +247,43 @@ def has_current_target_medication(med_list, codes, med_end):  # med_start, med_e
     return False
 
 
+def is_prn(med):
+    if med[6] == 1:
+        return True
+    return False
+
+
+def is_long_term(med):
+    if med[4] == 1:
+        return True
+    return False
+
+
+def is_coded(med):
+    if med[0] == '' or med[0] is None or med[1] == '' or med[1] is None:
+        return False
+    return True
+
+
+# Checks whether the medication is long-term or hasn't reached its end date
+# Applies a duration multipler.
+def is_current_medication(med, ref_date, duration_multiplier=1.2, prn_multiplier=2.0):
+    # print("ref_date: " + str(ref_date))
+    # print("med[2]: " + str(med[2]))
+    if med[2] > ref_date:
+        return False
+    med_start = med[2]
+    med_end = med[3]
+    multiplier = duration_multiplier
+    if is_prn(med):
+        multiplier = prn_multiplier
+    tdelta = med_end - med_start
+    med_end_mod = med_end + datetime.timedelta(seconds=multiplier*tdelta.total_seconds())
+    if is_long_term(med) or (ref_date <= med_end_mod):
+        return True
+    return False
+
+
 # used to tune script to specific database configuration settings
 def read_config(filename):
     home = os.path.expanduser("~")
@@ -241,7 +311,7 @@ def elderly(ddict, ref_date, check_status=True):
         include = True
         if check_status and not is_active(ddict, dkey):
             include = False
-        if include and (65 <= calculate_age(dno[0], dno[1], dno[2], ref_date) <= 15000):
+        if include and (65 <= calculate_age(dno[0], dno[1], dno[2], ref_date) <= 150):
             result[dkey] = dno
     return result
 
@@ -410,6 +480,7 @@ def sum_dict_values(the_dict):
         item_cnt += len(the_dict[the_key])
     return item_cnt
 
+
 try:
     # configure database connection
     db_user = read_config("db_user")
@@ -447,13 +518,17 @@ try:
 
     cnt_all_patients = 0
     cnt_ac_patients = 0
+    cnt_invalid_patients = 0
     for d_key in all_patients_dict:
         d_row = all_patients_dict[d_key]
+        if not is_valid_birthdate(d_row[0], d_row[1], d_row[2]):
+            cnt_invalid_patients += 1
         if calculate_age(d_row[0], d_row[1], d_row[2], start) > 150:
             cnt_all_patients += 1
             if is_active(all_patients_dict, d_key):
                 cnt_ac_patients += 1
 
+    print("  Number of invalid birthdate records: " + str(cnt_invalid_patients))
     print("  Number of patient > 150 years: " + str(cnt_all_patients))
     print("    Should be consistent with ")
     print("      SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d ")
@@ -468,8 +543,11 @@ try:
     print("<= DATE_SUB(NOW(), INTERVAL 150 YEAR);")
 
     elderly_patients_dict = elderly(all_patients_dict, start)
+
     print(
         "  Number of patients >= 65 on " + str(start) + ": " + str(len(elderly(all_patients_dict, start))))
+    elder_cnt = get_elderly_count_4months_ago(cur)
+    print("  Number of patient >= 65 four months ago via direct SQL is " + str(elder_cnt))
 
     #
     print("\nDrugs:")
@@ -486,21 +564,38 @@ try:
     print("Total number of non-archived drugs for active patients: "),
     cnt_all = 0
     cnt_lt = 0
+    cnt_prn = 0
+    cnt_coded = 0
     for d_key in considered_drugs_dict:
         d_arr = considered_drugs_dict[d_key]
         for d_elem in d_arr:
             cnt_all += 1
-            if d_elem[4] == 1:
+            if is_long_term(d_elem):
                 cnt_lt += 1
+            if is_prn(d_elem):
+                cnt_prn += 1
+            if is_coded(d_elem):
+                cnt_coded += 1
     print(str(cnt_all))
     print("Should match output from")
-    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")"
+    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
     print("  where dr.archived!=1 and de.patient_status='AC';")
-    print("Number of Long-Term Meds in Drugs table for active patients: "),
+    print("Number of Long-Term meds in Drugs table for active patients: "),
     print(str(cnt_lt))
     print("Should match output from")
-    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")"
+    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
     print("  where dr.archived!=1 and de.patient_status='AC' and dr.long_term=True;")
+    print("Number of PRN meds in Drugs table for active patients: "),
+    print(str(cnt_prn))
+    print("Should match output from")
+    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
+    print("  where dr.archived!=1 and de.patient_status='AC' and dr.prn=True;")
+    print("Number of coded meds in Drugs table for active patients: "),
+    print(str(cnt_coded))
+    print("Should match output from")
+    print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
+    print("  where dr.archived!=1 and de.patient_status='AC' and")
+    print("  (ATC!='' and ATC is not NULL) and (regional_identifier!='' and regional_identifier is not NULL);")
 
     #
     print("Problems:")
@@ -511,6 +606,42 @@ try:
     print("Encounters:")
     all_encounters_dict = get_encounters(cur)
     print("Size of encounter list: " + str(len(all_encounters_dict)))
+
+    print("\n\nTesting DQ-DEM-01:")
+    start24monthsago = end + relativedelta(months=-24)
+    cnt_active = 0
+    cnt_active_with_encounter = 0
+    the_default = None
+    for a_key in active_patients_dict:
+        cnt_active += 1
+        edict = all_encounters_dict.get(a_key, the_default)
+        med_dict = considered_drugs_dict.get(a_key, the_default)
+        if (edict and had_encounter(edict, start24monthsago, end)) or (
+                med_dict and had_rx_encounter(med_dict, start24monthsago, end)):
+            cnt_active_with_encounter += 1
+    print("Number of active patients: " + str(cnt_active))
+    print("Number of active patients with encounter in past 24 months: " + str(cnt_active_with_encounter))
+    percentage = 100.0*cnt_active_with_encounter/cnt_active
+    print("Percentage of active patients with encounter in past 24 months: " + str(percentage))
+
+    print("\n\nTesting DQ-MED-01:")
+    current_med = 0
+    coded_med = 0
+    for demographics_key in all_drugs_dict:
+        if is_active(all_patients_dict, demographics_key):
+            demo_drug_list = all_drugs_dict[demographics_key]
+            current_din = ''
+            for drug in demo_drug_list:
+                if drug[1] == '' or drug[1] is None or drug[1] != current_din:
+                    current_din = drug[1]  # logic here depends on drugs list being sorted by DIN, etc.
+                    if is_current_medication(drug, end):
+                        current_med += 1
+                        if is_coded(drug):
+                            coded_med += 1
+    print("Number of current medications: " + str(current_med))
+    print("Number of current medications that are coded: " + str(coded_med))
+    percentage = 100.0*coded_med/current_med
+    print("Percentage of current medications that are coded: " + str(percentage))
 
     print("\n\nTesting STOPP Rule A02:")
     any_drugs = ["C03C"]
