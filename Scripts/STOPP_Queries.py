@@ -39,14 +39,7 @@ try:
 
     print("Demographics:")
     all_patients_dict = DQ.get_demographics(cur)
-    print("  Total number of patient records: " + str(len(all_patients_dict)))
-    print("    Should be consistent with")
-    print("      select count(demographic_no) from demographic;")
-
     active_patients_dict = DQ.active_patients(all_patients_dict)
-    print("  Number of active patients: " + str(len(active_patients_dict)))
-    print("    Should be consistent with")
-    print("      select count(demographic_no) from demographic where patient_status='AC';")
 
     cnt_all_patients = 0
     cnt_ac_patients = 0
@@ -60,24 +53,8 @@ try:
             if DQ.is_active(all_patients_dict, d_key):
                 cnt_ac_patients += 1
 
-    print("  Number of invalid birthdate records: " + str(cnt_invalid_patients))
-    print("  Number of patient > 150 years: " + str(cnt_all_patients))
-    print("    Should be consistent with ")
-    print("      SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d ")
-    print("      WHERE CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth )"),
-    print("<= DATE_SUB(NOW(), INTERVAL 150 YEAR);")
-
-    print("  Number of active patient > 150 years: " + str(cnt_ac_patients))
-    print("    Should be consistent with ")
-    print("      SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d ")
-    print("      WHERE d.patient_status = 'AC' ")
-    print("      AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth )"),
-    print("<= DATE_SUB(NOW(), INTERVAL 150 YEAR);")
-
     elderly_patients_dict = DQ.elderly(all_patients_dict, start)
 
-    print(
-        "  Number of patients >= 65 on " + str(start) + ": " + str(len(DQ.elderly(all_patients_dict, start))))
     elder_cnt = DQ.get_elderly_count_4months_ago(cur)
     print("  Number of patient >= 65 four months ago via direct SQL is " + str(elder_cnt))
 

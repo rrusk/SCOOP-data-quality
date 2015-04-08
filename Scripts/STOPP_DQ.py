@@ -4,10 +4,11 @@
 # ~/mysql/db_config.  Change if needed.  Variables are initialized
 # this way for compatibility with prior Bash script.
 #
+import sys
+
 __author__ = 'rrusk'
 
 import os
-import sys
 import csv
 import datetime
 from datetime import date
@@ -118,6 +119,12 @@ def get_elderly_count_4months_ago(cursor):
     return int(result[0][0])
 
 
+# general query used for test purposes
+def get_query_results(cursor, query):
+    cursor.execute(query)
+    return cursor.fetchall()
+
+
 # reads csv file containing study providers listed row by row using first_name|last_name
 def get_study_provider_list(csv_file):
     provider_list = []
@@ -141,7 +148,8 @@ def get_provider_nums(provider_list, study_provider_list):
 
 # checks if birthdate is potentially valid
 def is_valid_birthdate(byear, bmonth, bday):
-    if byear is None or bmonth is None or bday is None or bmonth < 1 or bmonth > 12 or bday < 1 or bday > 31:
+    if byear is None or bmonth is None or bday is None or int(bmonth) < 1 or int(bmonth) > 12 or int(bday) < 1 or int(
+            bday) > 31:
         return False
     return True
 
@@ -278,7 +286,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.2, prn_multiplier
     if is_prn(med):
         multiplier = prn_multiplier
     tdelta = med_end - med_start
-    med_end_mod = med_end + datetime.timedelta(seconds=multiplier*tdelta.total_seconds())
+    med_end_mod = med_end + datetime.timedelta(seconds=multiplier * tdelta.total_seconds())
     if is_long_term(med) or (ref_date <= med_end_mod):
         return True
     return False
@@ -480,6 +488,7 @@ def sum_dict_values(the_dict):
         item_cnt += len(the_dict[the_key])
     return item_cnt
 
+
 if __name__ == '__main__':
     try:
         # configure database connection
@@ -500,68 +509,105 @@ if __name__ == '__main__':
 
         cur = con.cursor()
 
-        print("Providers:")
+        err_cnt = 0
+
+        def error_message(method_name, expected, actual, error_cnt):
+            print("ERROR in " + str(method_name) + "!!!")
+            print("Expected " + str(expected) + " but got " + str(actual))
+            return error_cnt + 1
+
+        # get provider numbers
         providers = get_providers(cur)
         provider_nos = get_provider_nums(providers, study_providers)
-        print("provider_nos: " + str(provider_nos))
+        print("provider_nums: " + str(provider_nos))
 
-        print("Demographics:")
+        # test get_demographics
         all_patients_dict = get_demographics(cur)
-        print("  Total number of patient records: " + str(len(all_patients_dict)))
-        print("    Should be consistent with")
-        print("      select count(demographic_no) from demographic;")
+        demo_query = "select count(demographic_no) from demographic;"
+        number = get_query_results(cur, demo_query)[0][0]
+        if len(all_patients_dict) != int(number):
+            err_cnt = error_message("get_demographics", number, len(all_patients_dict), err_cnt)
 
+        # test active_patients
         active_patients_dict = active_patients(all_patients_dict)
-        print("  Number of active patients: " + str(len(active_patients_dict)))
-        print("    Should be consistent with")
-        print("      select count(demographic_no) from demographic where patient_status='AC';")
+        ac_demo_query = "select count(demographic_no) from demographic where patient_status='AC';"
+        number = get_query_results(cur, ac_demo_query)[0][0]
+        if len(active_patients_dict) != int(number):
+            err_cnt = error_message("get_demographics", number, len(active_patients_dict), err_cnt)
 
+        # set up tests of is_valid_birthdate, calculate_age, elderly
         cnt_all_patients = 0
         cnt_ac_patients = 0
-        cnt_invalid_patients = 0
+        cnt_invalid_birthdates = 0
         for d_key in all_patients_dict:
             d_row = all_patients_dict[d_key]
             if not is_valid_birthdate(d_row[0], d_row[1], d_row[2]):
-                cnt_invalid_patients += 1
+                cnt_invalid_birthdates += 1
             if calculate_age(d_row[0], d_row[1], d_row[2], start) > 150:
                 cnt_all_patients += 1
                 if is_active(all_patients_dict, d_key):
                     cnt_ac_patients += 1
 
-        print("  Number of invalid birthdate records: " + str(cnt_invalid_patients))
-        print("  Number of patient > 150 years: " + str(cnt_all_patients))
-        print("    Should be consistent with ")
-        print("      SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d ")
-        print("      WHERE CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth )"),
-        print("<= DATE_SUB(NOW(), INTERVAL 150 YEAR);")
+        # test is_valid_birthdate
+        print("WARN: number of invalid birthdate records: " + str(cnt_invalid_birthdates))
+        invalid_birthdate_query = """
+          select count(*) from demographic
+          where month_of_birth < 1 or month_of_birth > 12 or date_of_birth<1 or date_of_birth>31;
+          """
+        number = get_query_results(cur, invalid_birthdate_query)[0][0]
+        if cnt_invalid_birthdates != int(number):
+            err_cnt = error_message("is_valid_birthdate", number, len(cnt_invalid_birthdates), err_cnt)
 
-        print("  Number of active patient > 150 years: " + str(cnt_ac_patients))
-        print("    Should be consistent with ")
-        print("      SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d ")
-        print("      WHERE d.patient_status = 'AC' ")
-        print("      AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth )"),
-        print("<= DATE_SUB(NOW(), INTERVAL 150 YEAR);")
+        # test calculate_age
+        too_old_query = """
+          SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
+          WHERE CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <= DATE_SUB(NOW(), INTERVAL 150 YEAR);
+          """
+        number = get_query_results(cur, too_old_query)[0][0]
+        if cnt_ac_patients != int(number):
+            err_cnt = error_message("calculate_age", number, cnt_ac_patients, err_cnt)
 
+        # test elderly
         elderly_patients_dict = elderly(all_patients_dict, start)
+        cnt_elderly = len(elderly(all_patients_dict, start))
+        cnt_elderly_query = """
+               SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
+               WHERE d.patient_status = 'AC' AND d.year_of_birth is not NULL
+               AND d.month_of_birth is not NULL AND d.date_of_birth is not NULL
+               AND d.month_of_birth >= 1 AND d.month_of_birth <= 12
+               AND d.date_of_birth >= 1 AND d.date_of_birth <= 31
+               AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=
+               DATE_SUB( DATE_SUB(DATE_SUB(NOW(), INTERVAL 1 DAY), INTERVAL 4 MONTH), INTERVAL 65 YEAR);
+               """
+        number = get_query_results(cur, cnt_elderly_query)[0][0]
+        if cnt_elderly != int(number):
+            err_cnt = error_message("elderly", number, cnt_elderly, err_cnt)
 
-        print(
-            "  Number of patients >= 65 on " + str(start) + ": " + str(len(elderly(all_patients_dict, start))))
-        elder_cnt = get_elderly_count_4months_ago(cur)
-        print("  Number of patient >= 65 four months ago via direct SQL is " + str(elder_cnt))
-
-        #
-        print("\nDrugs:")
+        # test get_drugs
         all_drugs_dict = get_drugs(cur)
-        print("Number of patients with medication list: " + str(len(all_drugs_dict)))
-        print("Total number of non-archived drugs in drugs table: " + str(sum_dict_values(all_drugs_dict)))
-        print("  Should match output from")
-        print("    select count(*) from drugs where archived!=1;")
+        # query counts number of patients with medication list
+        patient_drug_cnt_query = """
+            select count(*) from (select distinct demographic_no from drugs where archived=0) x;
+            """
+        number = get_query_results(cur, patient_drug_cnt_query)[0][0]
+        if len(all_drugs_dict) != int(number):
+            err_cnt = error_message("get_drugs", number, len(all_drugs_dict), err_cnt)
+        drug_cnt_query = "select count(*) from drugs where archived!=1;"
+        number = get_query_results(cur, drug_cnt_query)[0][0]
+        if sum_dict_values(all_drugs_dict) != number:
+            err_cnt = error_message("sum_dict_values", number, sum_dict_values(all_drugs_dict), err_cnt)
 
+        # test relevant_drugs
         considered_drugs_dict = relevant_drugs(all_patients_dict, all_drugs_dict)
-        print("Number of active patients with medication list: " + str(len(considered_drugs_dict)))
+        ac_patient_drug_cnt = """
+            select count(*) from (select distinct dr.demographic_no from drugs dr join demographic de
+            on dr.demographic_no = de.demographic_no where de.patient_status='AC' and dr.archived=0) x;
+            """
+        number = get_query_results(cur, ac_patient_drug_cnt)[0][0]
+        if len(considered_drugs_dict) != number:
+            err_cnt = error_message("relevant_drugs", number, len(considered_drugs_dict), err_cnt)
 
-        #
-        print("Total number of non-archived drugs for active patients: "),
+        # set up test of is_long_term, is_prn, is_coded
         cnt_all = 0
         cnt_lt = 0
         cnt_prn = 0
@@ -576,102 +622,78 @@ if __name__ == '__main__':
                     cnt_prn += 1
                 if is_coded(d_elem):
                     cnt_coded += 1
-        print(str(cnt_all))
-        print("Should match output from")
-        print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
-        print("  where dr.archived!=1 and de.patient_status='AC';")
-        print("Number of Long-Term meds in Drugs table for active patients: "),
-        print(str(cnt_lt))
-        print("Should match output from")
-        print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
-        print("  where dr.archived!=1 and de.patient_status='AC' and dr.long_term=True;")
-        print("Number of PRN meds in Drugs table for active patients: "),
-        print(str(cnt_prn))
-        print("Should match output from")
-        print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
-        print("  where dr.archived!=1 and de.patient_status='AC' and dr.prn=True;")
-        print("Number of coded meds in Drugs table for active patients: "),
-        print(str(cnt_coded))
-        print("Should match output from")
-        print("  select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no")
-        print("  where dr.archived!=1 and de.patient_status='AC' and")
-        print("  (ATC!='' and ATC is not NULL) and (regional_identifier!='' and regional_identifier is not NULL);")
 
-        #
-        print("Problems:")
+        # another test of relevant_drugs
+        test_query = """
+            select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no
+            where dr.archived!=1 and de.patient_status='AC';
+            """
+        number = get_query_results(cur, test_query)[0][0]
+        if cnt_all != number:
+            err_cnt = error_message("relevant_drugs", number, cnt_all, err_cnt)
+
+        # test is_long_term
+        test_query = """
+            select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no
+            where dr.archived!=1 and de.patient_status='AC' and dr.long_term=True;
+            """
+        number = get_query_results(cur, test_query)[0][0]
+        if cnt_lt != number:
+            err_cnt = error_message("is_long_term", number, cnt_lt, err_cnt)
+
+        # test is_prn
+        test_query = """
+            select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no
+            where dr.archived!=1 and de.patient_status='AC' and dr.prn=True;
+            """
+        number = get_query_results(cur, test_query)[0][0]
+        if cnt_prn != number:
+            err_cnt = error_message("is_long_term", number, cnt_prn, err_cnt)
+
+        # test is_coded
+        test_query = """
+           select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no
+           where dr.archived!=1 and de.patient_status='AC' and
+           (ATC!='' and ATC is not NULL) and (regional_identifier!='' and regional_identifier is not NULL);
+            """
+        number = get_query_results(cur, test_query)[0][0]
+        if cnt_coded != number:
+            err_cnt = error_message("is_long_term", number, cnt_coded, err_cnt)
+
+        # test get_dxresearch
         dx_dict = get_dxresearch(cur)
-        print("Size of dxresearch: " + str(len(dx_dict)))
+        # query counts number of patients with problem list
+        test_query = """
+            select count(*) from (select distinct demographic_no from dxresearch where status!='D') x;
+            """
+        number = get_query_results(cur, test_query)[0][0]
+        if len(dx_dict) != int(number):
+            err_cnt = error_message("get_dxresearch", number, len(dx_dict), err_cnt)
+        test_query = "select count(*) from dxresearch where status!='D';"
+        number = get_query_results(cur, test_query)[0][0]
+        if sum_dict_values(dx_dict) != number:
+            err_cnt = error_message("sum_dict_values", number, sum_dict_values(dx_dict), err_cnt)
 
         #
-        print("Encounters:")
         all_encounters_dict = get_encounters(cur)
-        print("Size of encounter list: " + str(len(all_encounters_dict)))
+        test_query = """
+            select count(*) from (select distinct cmn.demographic_no from casemgmt_note cmn where cmn.provider_no!=-1
+            and cmn.note_id = (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
+            order by cmn.observation_date) x;
+            """
+        number = get_query_results(cur, test_query)[0][0]
+        if len(all_encounters_dict) != number:
+            err_cnt = error_message("get_encounters", number, len(all_encounters_dict), err_cnt)
+        test_query = """
+            select count(*) from (select cmn.demographic_no from casemgmt_note cmn where cmn.provider_no!=-1 and
+            cmn.note_id = (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
+            order by cmn.observation_date) x;
+            """
+        number = get_query_results(cur, test_query)[0][0]
+        if sum_dict_values(all_encounters_dict) != number:
+            err_cnt = error_message("get_encounters or sum_dict_values", number, len(all_encounters_dict), err_cnt)
 
-        print("\n\nTesting DQ-DEM-01:")
-        start24monthsago = end + relativedelta(months=-24)
-        cnt_active = 0
-        cnt_active_with_encounter = 0
-        the_default = None
-        for a_key in active_patients_dict:
-            cnt_active += 1
-            edict = all_encounters_dict.get(a_key, the_default)
-            med_dict = considered_drugs_dict.get(a_key, the_default)
-            if (edict and had_encounter(edict, start24monthsago, end)) or (
-                    med_dict and had_rx_encounter(med_dict, start24monthsago, end)):
-                cnt_active_with_encounter += 1
-        print("Number of active patients: " + str(cnt_active))
-        print("Number of active patients with encounter in past 24 months: " + str(cnt_active_with_encounter))
-        percentage = 100.0*cnt_active_with_encounter/cnt_active
-        print("Percentage of active patients with encounter in past 24 months: " + str(percentage))
-
-        print("\n\nTesting DQ-MED-01:")
-        current_med = 0
-        coded_med = 0
-        for demographics_key in all_drugs_dict:
-            if is_active(all_patients_dict, demographics_key):
-                demo_drug_list = all_drugs_dict[demographics_key]
-                current_din = ''
-                for drug in demo_drug_list:
-                    if drug[1] == '' or drug[1] is None or drug[1] != current_din:
-                        current_din = drug[1]  # logic here depends on drugs list being sorted by DIN, etc.
-                        if is_current_medication(drug, end):
-                            current_med += 1
-                            if is_coded(drug):
-                                coded_med += 1
-        print("Number of current medications: " + str(current_med))
-        print("Number of current medications that are coded: " + str(coded_med))
-        percentage = 100.0*coded_med/current_med
-        print("Percentage of current medications that are coded: " + str(percentage))
-
-        print("\n\nTesting STOPP Rule A02:")
-        any_drugs = ["C03C"]
-        notanydx_list = ["401", "402", "404", "405", "428", "39891", "7895", "5712", "5715", "5716", "581", "V1303",
-                         "5853", "5854", "5855", "5856", "5859", "585", "586", "5184"]
-        d_anydrug_n_notanyproblem(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs,
-                                  notanydx_list, provider_nos, start, end)
-
-        print("\n\nTesting STOPP Rule A03:")
-        dx_codes = ["401"]
-        any_drugs = ["C03C"]
-        notany_drugs = ["C03AA", "C07A", "C08", "C09"]
-        d_anyproblem_n_anydrug_notanydrug(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict,
-                                          dx_codes, any_drugs, notany_drugs, provider_nos, start, end)
-
-        print("\n\nTesting STOPP Rule test B07:")
-        any_drugs = ["N03AE01", "N05BA02", "N05BA05", "N05BA01", "N05CD01", "N05CD03", "N05CD08", "N05CD02"]
-        d_n_anydrug(elderly_patients_dict, all_drugs_dict, all_encounters_dict, any_drugs, provider_nos, start, end)
-
-        print("\n\nTesting STOPP Rule B08:")
-        any_drugs = ["N05A", "N06C"]
-        notanydx_list = ["295", "297", "298"]
-        d_anydrug_n_notanyproblem(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs,
-                                  notanydx_list, provider_nos, start, end)
-
-        print("\n\nTesting STOPP Rule I02:")
-        any_drugs = ["N02A"]
-        notany_drugs = ["A06A"]
-        d_anydrug_n_notanydrug(elderly_patients_dict, dx_dict, all_drugs_dict, all_encounters_dict, any_drugs,
-                               notany_drugs, provider_nos, start, end)
+        print("ERRORS: " + str(err_cnt))
 
     except Mdb.Error as e:
         print("Error %d: %s" % (e.args[0], e.args[1]))
