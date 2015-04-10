@@ -13,6 +13,7 @@ import csv
 import datetime
 from datetime import date
 import collections
+#  from collections import defaultdict
 
 # if import MySQLdb fails (for Ubuntu 14.04.1) run 'sudo apt-get install python-mysqldb'
 import MySQLdb as Mdb
@@ -42,6 +43,13 @@ def create_dict_by_demographic_no(mlist):
     return mdict
 
 
+# def create_med_dict(mlist):
+#     mdict = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+#     for mlist_row in mlist:
+#         mdict[mlist_row[0]][mlist_row[2]] = [mlist_row[1:]]
+#     return mdict
+#
+
 # creates a demographics dictionary with demographic_no as key and
 # value = [year_of_birth, month_of_birth, date_of_birth, sex, patient_status]
 def get_demographics(cursor):
@@ -56,12 +64,23 @@ def get_demographics(cursor):
 # value = [ATC, DIN, rx_date, end_date, long_term, lastUpdateDate, prn, provider_no]
 def get_drugs(cursor, archived=False):
     query = """select d.demographic_no, d.ATC, d.regional_identifier as DIN, d.rx_date, d.end_date, d.long_term,
-               d.lastUpdateDate, d.prn, d.provider_no from drugs d where d.archived=%s order by d.demographic_no asc,
-               DIN asc, d.end_date desc, d.long_term desc"""
+               d.lastUpdateDate, d.prn, d.provider_no, d.BN, d.GN from drugs d where d.archived=%s
+               order by d.demographic_no asc, DIN asc, d.rx_date desc, d.BN, d.GN, d.long_term desc"""
     cursor.execute(query, archived)
     result = cursor.fetchall()
     return create_dict_by_demographic_no(result)
 
+
+# # creates a drugs dictionary with demographic_no, DIN as key and
+# # value = [ATC, DIN, rx_date, end_date, long_term, lastUpdateDate, prn, provider_no]
+# def get_drugs2(cursor, archived=False):
+#     query = """select d.demographic_no, d.ATC, d.regional_identifier as DIN, d.rx_date, d.end_date, d.long_term,
+#                d.lastUpdateDate, d.prn, d.provider_no, d.BN, d.GN from drugs d where d.archived=%s
+#                order by d.demographic_no asc, DIN asc, d.rx_date desc, d.BN, d.GN, d.long_term desc"""
+#     cursor.execute(query, archived)
+#     result = cursor.fetchall()
+#     return create_med_dict(result)
+#
 
 # creates a problem dictionary with demographic_no as key and
 # value = [icd9, start_date, update_date, status]
@@ -105,18 +124,18 @@ def get_providers(cursor):
     return result
 
 
-# get elderly patients with active status who were 65 years as of 4 months ago yesterday using direct SQL query
-def get_elderly_count_4months_ago(cursor):
-    query = """SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
-               WHERE d.patient_status = 'AC' AND d.year_of_birth is not NULL
-               AND d.month_of_birth is not NULL AND d.date_of_birth is not NULL
-               AND d.month_of_birth >= 1 AND d.month_of_birth <= 12
-               AND d.date_of_birth >= 1 AND d.date_of_birth <= 31
-               AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=
-               DATE_SUB( DATE_SUB(DATE_SUB(NOW(), INTERVAL 1 DAY), INTERVAL 4 MONTH), INTERVAL 65 YEAR);"""
-    cursor.execute(query)
-    result = cursor.fetchall()
-    return int(result[0][0])
+# # get elderly patients with active status who were 65 years as of 4 months ago yesterday using direct SQL query
+# def get_elderly_count_4months_ago(cursor):
+#     query = """SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
+#                WHERE d.patient_status = 'AC' AND d.year_of_birth is not NULL
+#                AND d.month_of_birth is not NULL AND d.date_of_birth is not NULL
+#                AND d.month_of_birth >= 1 AND d.month_of_birth <= 12
+#                AND d.date_of_birth >= 1 AND d.date_of_birth <= 31
+#                AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=
+#                DATE_SUB( DATE_SUB(DATE_SUB(NOW(), INTERVAL 1 DAY), INTERVAL 4 MONTH), INTERVAL 65 YEAR);"""
+#     cursor.execute(query)
+#     result = cursor.fetchall()
+#     return int(result[0][0])
 
 
 # general query used for test purposes
@@ -275,9 +294,11 @@ def is_coded(med):
 
 # Checks whether the medication is long-term or hasn't reached its end date
 # Applies a duration multipler.
-def is_current_medication(med, ref_date, duration_multiplier=1.2, prn_multiplier=2.0):
+def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier=1.0):
     # print("ref_date: " + str(ref_date))
     # print("med[2]: " + str(med[2]))
+    #
+    # if ref_date is before medication start date return false
     if med[2] > ref_date:
         return False
     med_start = med[2]
@@ -287,6 +308,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.2, prn_multiplier
         multiplier = prn_multiplier
     tdelta = med_end - med_start
     med_end_mod = med_end + datetime.timedelta(seconds=multiplier * tdelta.total_seconds())
+    # if long-term or between med start and end dates return true
     if is_long_term(med) or (ref_date <= med_end_mod):
         return True
     return False
@@ -567,7 +589,7 @@ if __name__ == '__main__':
         if cnt_ac_patients != int(number):
             err_cnt = error_message("calculate_age", number, cnt_ac_patients, err_cnt)
 
-        # test elderly
+        # test elderly (number of elderly on start date which was 4 months ago)
         elderly_patients_dict = elderly(all_patients_dict, start)
         cnt_elderly = len(elderly(all_patients_dict, start))
         cnt_elderly_query = """
@@ -597,7 +619,7 @@ if __name__ == '__main__':
         if sum_dict_values(all_drugs_dict) != number:
             err_cnt = error_message("sum_dict_values", number, sum_dict_values(all_drugs_dict), err_cnt)
 
-        # test relevant_drugs
+        # test relevant_drugs (prescribed to patient with status 'AC')
         considered_drugs_dict = relevant_drugs(all_patients_dict, all_drugs_dict)
         ac_patient_drug_cnt = """
             select count(*) from (select distinct dr.demographic_no from drugs dr join demographic de
@@ -658,7 +680,7 @@ if __name__ == '__main__':
             """
         number = get_query_results(cur, test_query)[0][0]
         if cnt_coded != number:
-            err_cnt = error_message("is_long_term", number, cnt_coded, err_cnt)
+            err_cnt = error_message("is_coded", number, cnt_coded, err_cnt)
 
         # test get_dxresearch
         dx_dict = get_dxresearch(cur)
@@ -674,7 +696,7 @@ if __name__ == '__main__':
         if sum_dict_values(dx_dict) != number:
             err_cnt = error_message("sum_dict_values", number, sum_dict_values(dx_dict), err_cnt)
 
-        #
+        # test get_encounters
         all_encounters_dict = get_encounters(cur)
         test_query = """
             select count(*) from (select distinct cmn.demographic_no from casemgmt_note cmn where cmn.provider_no!=-1

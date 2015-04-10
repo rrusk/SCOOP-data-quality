@@ -38,8 +38,8 @@ function map(patient) {
     }
 
     // Test for PRN flag
-    function isPRN(drug) {
-        return (drug.freeTextSig().indexOf(" E2E_PRN flag") !== -1);
+    function isPRNold(drug) {
+        return (drug.freeTextSig().indexOf(" E2E_PRN_FLAG") !== -1);
     }
 
     // Test that record is current (as of day before date at 0:00AM)
@@ -60,26 +60,45 @@ function map(patient) {
         var drugStart = drug.indicateMedicationStart().getTime();
         var drugEnd = drug.indicateMedicationStop().getTime();
 
-        m = durationMultiplier;
-        if (isPRN(drug)) {
+        var m = durationMultiplier;
+        if (isPRNold(drug)) {
             m = prnMultiplier;
         }
         return (endDateOffset(drugStart, drugEnd, m) >= end && drugStart <= end);
     }
 
+    function hasCode(drug) {
+        var codes = drug.medicationInformation().codedProduct();
+        if (codes) {
+            for (var j = 0; j < codes.length; j++) {
+                if (codes[j].codeSystemName() && codes[j].codeSystemName() !== 'Unknown' &&
+                    codes[j].code() && codes[j].code() !== 'NI') {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     function checkMedications(drugList) {
         for (var i = 0; i < drugList.length; i++) {
+            if (drugList[i].isPRN() != isPRNold(drugList[i])) {
+                emit("prn_mismatch", 1);
+            }
+            if (drugList[i].isLongTerm() && !isCurrentDrug(drugList[i])) {
+                emit("lt_mismatch1", 1);
+            }
             if (isCurrentDrug(drugList[i]) || isDrugInWindow(drugList[i])) {
-                emit('denominator', 1);
-                // Get all represented codes for each drug
-                var codes = drugList[i].medicationInformation().codedProduct();
-                if (codes) { // Look for uncoded medications
-                    for (var j = 0; j < codes.length; j++) {
-                        if (codes[j].codeSystemName() && codes[j].codeSystemName() !== 'Unknown' &&
-                            codes[j].code() && codes[j].code() !== 'nullFlavor') {
-                            emit('numerator', 1);
-                            break; // some medications have multiple codes so quite after first is found
-                        }
+                if (!isDrugInWindow(drugList[i]) && !drugList[i].isLongTerm()) {
+                    emit('lt_mismatch2', 1)
+                }
+                if (currentRec) {
+                    //var num_prescriptions = drugList[i].orderInformation().length;
+                    emit('denominator', 1);
+                    if (hasCode(drugList[i])) {
+                        emit('numerator', 1)
+                    } else {
+                        //emit('Unknown', num_prescriptions);
                     }
                 }
             }
