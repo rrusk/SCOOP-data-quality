@@ -13,10 +13,11 @@ function map(patient) {
     var drugList = patient.medications();
 
     // Months are counted from 0 in Javascript so August is 7, for instance.
-    var now = new Date();  // no parameters or yyyy,mm,dd if specified
-    //var start = addDate(now, 0, -12, -1); // 12 month study window; generally most
-    var end = addDate(now, 0, 0, -1);    // recent records are from previous day
-    var currentRec = currentRecord(now);
+    var refDate = setStoppRefDate();  // no parameters or yyyy,mm,dd if specified
+    //var start = addDate(refDate, 0, -12, -1); // 12 month study window; generally most
+    var end = addDate(refDate, 0, 0, -1);    // recent records are from previous day
+    //var currentRec = currentRecord(refDate);
+    var currentRec = currentRecord(end);
 
     // Shifts date by year, month, and date specified
     function addDate(date, y, m, d) {
@@ -44,9 +45,9 @@ function map(patient) {
 
     // Test that record is current (as of day before date at 0:00AM)
     function currentRecord(date) {
-        var daybefore = new Date(date);
-        daybefore.setDate(daybefore.getDate() - 1);
-        daybefore.setHours(0, 0);
+        var daybefore = date; // new Date(date);
+        //daybefore.setDate(daybefore.getDate() - 1);
+        //daybefore.setHours(0, 0);
         return (patient['json']['effective_time'] > daybefore / 1000);
     }
 
@@ -54,6 +55,11 @@ function map(patient) {
     function isCurrentDrug(drug) {
         var status = drug['json']['statusOfMedication']['value'];
         return currentRec && (status === 'active');
+    }
+
+    // Status is active if current long-term medication or before prescription end date
+    function isCurrentDrug2(drug) {
+        return drug.isLongTerm() || isDrugInWindow2(drug);
     }
 
     function isDrugInWindow(drug) {
@@ -65,6 +71,12 @@ function map(patient) {
             m = prnMultiplier;
         }
         return (endDateOffset(drugStart, drugEnd, m) >= end && drugStart <= end);
+    }
+
+    function isDrugInWindow2(drug) {
+        var drugStart = drug.indicateMedicationStart().getTime();
+        var drugEnd = drug.indicateMedicationStop().getTime();
+        return (drugEnd >= end && drugStart <= end);
     }
 
     function hasCode(drug) {
@@ -80,6 +92,17 @@ function map(patient) {
         return false;
     }
 
+    function getCode(drug) {
+        var result = "";
+        var codes = drug.medicationInformation().codedProduct();
+        if (codes) {
+            for (var j = 0; j < codes.length; j++) {
+                result += "_"+codes[j].code();
+            }
+        }
+        return result;
+    }
+
     function checkMedications(drugList) {
         for (var i = 0; i < drugList.length; i++) {
             if (drugList[i].isPRN() != isPRNold(drugList[i])) {
@@ -87,6 +110,13 @@ function map(patient) {
             }
             if (drugList[i].isLongTerm() && !isCurrentDrug(drugList[i])) {
                 emit("lt_mismatch1", 1);
+            }
+            if (isCurrentDrug(drugList[i])!=isCurrentDrug2(drugList[i])) {
+                emit("current_drug_mismatch", 1);
+                var emit_str = "demo_"+patient["json"]["emr_demographics_primary_key"]+
+                    "_"+isCurrentDrug(drugList[i])+"_"+isCurrentDrug2(drugList[i])+
+                    "_"+getCode(drugList[i])+"_"+drugList[i].indicateMedicationStop()+"_"+drugList[i].isLongTerm();
+                emit(emit_str, 1);
             }
             if (isCurrentDrug(drugList[i]) || isDrugInWindow(drugList[i])) {
                 if (!isDrugInWindow(drugList[i]) && !drugList[i].isLongTerm()) {

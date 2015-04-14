@@ -111,69 +111,55 @@ try:
     percentage = 100.0 * coded_med / current_med
     print("Percentage of current medications that are coded: " + str(percentage))
 
-    print("\n\nTesting DQ-MED-01 v2:")
-    current_med = 0
-    coded_med = 0
-    cnt_demographics = 0
-    cnt_ac_demographics = 0
-    for demographics_key in all_drugs_dict:
-        cnt_demographics += 1
-        if DQ.is_active(all_patients_dict, demographics_key):
-            cnt_ac_demographics += 1
-            patients_drug_list = all_drugs_dict[demographics_key]
-            # logic here depends on drugs list being sorted by DIN, etc.
-            for drug in patients_drug_list:
-                if drug[1] == '' or drug[1] is None:
-                    current_din = 'null'
-                else:
-                    current_din = drug[1]
-                    if len(current_din) != 8:
-                        print("DEBUG: current_din: " + str(current_din))
-                if True:  # previous_din != current_din:
-                    if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
-                        current_med += 1
-                        if current_din != "null":
-                            coded_med += 1
-
-                        # mysql> select count(*) from (select dr.demographic_no, regional_identifier, BN, GN, customName, ATC, dr.end_date from drugs dr join demographic de on dr.demographic_no = de.demographic_no where de.patient_status='AC' and dr.archived=0 and (dr.long_term=1 or dr.end_date>NOW()) and LENGTH(dr.regional_identifier)=8) x;
-                        # +----------+
-                        # | count(*) |
-                        # +----------+
-                        # |     7776 |
-                        # +----------+
-                        # 1 row in set (0.06 sec)
-                        #
-                        # mysql> select count(*) from (select dr.demographic_no, regional_identifier, BN, GN, customName, ATC, dr.end_date from drugs dr join demographic de on dr.demographic_no = de.demographic_no where de.patient_status='AC' and dr.archived=0 and (dr.long_term=1 or dr.end_date>NOW())) x;
-                        # +----------+
-                        # | count(*) |
-                        # +----------+
-                        # |     8131 |
-                        # +----------+
-                        # 1 row in set (0.07 sec)
-                        #
-
-    # print("Number of patients with medications: " + str(cnt_demographics))
-    # print("Number of active patients with medications: " + str(cnt_ac_demographics))
-    print("Number of current medications: " + str(current_med))
-    print("Number of current medications that are coded: " + str(coded_med))
-    percentage = 100.0 * coded_med / current_med
-    print("Percentage of current medications that are coded: " + str(percentage))
-
-    # print("\nTesting DQ-MED-01 v2")
+    # print("\n\nTesting DQ-MED-01 v2:")
     # current_med = 0
     # coded_med = 0
-    # all_drugs = DQ.get_drugs2(cur)
-    # med_dictionary = DQ.create_med_dict(all_drugs)
-    # for patient in med_dictionary:
-    # if DQ.is_active(all_patients_dict, patient):
-    # for DIN in med_dictionary[patient]:
-    # if DQ.is_current_medication(med_dictionary[patient][DIN], end, duration_multiplier=1.2,
-    #                                         prn_multiplier=2.0):
-    #                 current_med += 1
-    #                 if DQ.is_coded(med_dictionary[patient][DIN]):
-    #                     coded_med += 1
-    # #  print("Number of patients with medications: " + str(cnt_demographics))
-    # #  print("Number of active patients with medications: " + str(cnt_ac_demographics))
+    # cnt_demographics = 0
+    # cnt_ac_demographics = 0
+    # for demographics_key in all_drugs_dict:
+    #     cnt_demographics += 1
+    #     if DQ.is_active(all_patients_dict, demographics_key):
+    #         cnt_ac_demographics += 1
+    #         patients_drug_list = all_drugs_dict[demographics_key]
+    #         # logic here depends on drugs list being sorted by DIN, etc.
+    #         for drug in patients_drug_list:
+    #             if drug[1] == '' or drug[1] is None:
+    #                 current_din = 'null'
+    #             else:
+    #                 current_din = drug[1]
+    #                 if len(current_din) != 8:
+    #                     print("DEBUG: current_din: " + str(current_din))
+    #             if True:  # previous_din != current_din:
+    #                 if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
+    #                     current_med += 1
+    #                     if current_din != "null":
+    #                         coded_med += 1
+    #
+    #                     # mysql> select count(*) from
+    #  (select dr.demographic_no, regional_identifier, BN, GN, customName, ATC, dr.end_date from drugs dr join
+    #  demographic de on dr.demographic_no = de.demographic_no where de.patient_status='AC' and dr.archived=0 and
+    #  (dr.long_term=1 or dr.end_date>NOW()) and LENGTH(dr.regional_identifier)=8) x;
+    #                     # +----------+
+    #                     # | count(*) |
+    #                     # +----------+
+    #                     # |     7776 |
+    #                     # +----------+
+    #                     # 1 row in set (0.06 sec)
+    #                     #
+    #                     # mysql> select count(*) from
+    #  (select dr.demographic_no, regional_identifier, BN, GN, customName, ATC, dr.end_date from drugs dr join
+    #  demographic de on dr.demographic_no = de.demographic_no where de.patient_status='AC' and dr.archived=0 and
+    #  (dr.long_term=1 or dr.end_date>NOW())) x;
+    #                     # +----------+
+    #                     # | count(*) |
+    #                     # +----------+
+    #                     # |     8131 |
+    #                     # +----------+
+    #                     # 1 row in set (0.07 sec)
+    #                     #
+    #
+    # # print("Number of patients with medications: " + str(cnt_demographics))
+    # # print("Number of active patients with medications: " + str(cnt_ac_demographics))
     # print("Number of current medications: " + str(current_med))
     # print("Number of current medications that are coded: " + str(coded_med))
     # percentage = 100.0 * coded_med / current_med

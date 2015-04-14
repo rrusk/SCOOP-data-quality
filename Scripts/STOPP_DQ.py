@@ -65,7 +65,7 @@ def get_demographics(cursor):
 def get_drugs(cursor, archived=False):
     query = """select d.demographic_no, d.ATC, d.regional_identifier as DIN, d.rx_date, d.end_date, d.long_term,
                d.lastUpdateDate, d.prn, d.provider_no, d.BN, d.GN from drugs d where d.archived=%s
-               order by d.demographic_no asc, DIN asc, d.rx_date desc, d.BN, d.GN, d.long_term desc"""
+               order by d.demographic_no asc, DIN asc, d.BN asc, d.GN asc, d.rx_date desc"""
     cursor.execute(query, archived)
     result = cursor.fetchall()
     return create_dict_by_demographic_no(result)
@@ -287,7 +287,8 @@ def is_long_term(med):
 
 
 def is_coded(med):
-    if med[0] == '' or med[0] is None or med[1] == '' or med[1] is None:
+    if med[0] == '' or med[0] == ' ' or med[0] == '   ' or med[0] is None or 'null' in med[0]\
+            or med[1] == '' or med[1] is None or ' ' in med[1] or 'null' in med[1]:
         return False
     return True
 
@@ -307,7 +308,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
     if is_prn(med):
         multiplier = prn_multiplier
     tdelta = med_end - med_start
-    med_end_mod = med_end + datetime.timedelta(seconds=multiplier * tdelta.total_seconds())
+    med_end_mod = med_start + datetime.timedelta(seconds=multiplier*tdelta.total_seconds())
     # if long-term or between med start and end dates return true
     if is_long_term(med) or (ref_date <= med_end_mod):
         return True
@@ -555,39 +556,41 @@ if __name__ == '__main__':
         ac_demo_query = "select count(demographic_no) from demographic where patient_status='AC';"
         number = get_query_results(cur, ac_demo_query)[0][0]
         if len(active_patients_dict) != int(number):
-            err_cnt = error_message("get_demographics", number, len(active_patients_dict), err_cnt)
+            err_cnt = error_message("active_patients", number, len(active_patients_dict), err_cnt)
 
         # set up tests of is_valid_birthdate, calculate_age, elderly
-        cnt_all_patients = 0
-        cnt_ac_patients = 0
+        cnt_ac_patients_over150 = 0
         cnt_invalid_birthdates = 0
         for d_key in all_patients_dict:
             d_row = all_patients_dict[d_key]
             if not is_valid_birthdate(d_row[0], d_row[1], d_row[2]):
                 cnt_invalid_birthdates += 1
             if calculate_age(d_row[0], d_row[1], d_row[2], start) > 150:
-                cnt_all_patients += 1
                 if is_active(all_patients_dict, d_key):
-                    cnt_ac_patients += 1
+                    cnt_ac_patients_over150 += 1
 
         # test is_valid_birthdate
-        print("WARN: number of invalid birthdate records: " + str(cnt_invalid_birthdates))
+        if cnt_invalid_birthdates > 0:
+            print("WARN: number of invalid birthdate records: " + str(cnt_invalid_birthdates))
         invalid_birthdate_query = """
           select count(*) from demographic
-          where month_of_birth < 1 or month_of_birth > 12 or date_of_birth<1 or date_of_birth>31;
+          where year_of_birth is NULL or month_of_birth is NULL or date_of_birth is NULL or
+          month_of_birth < 1 or month_of_birth > 12 or date_of_birth<1 or date_of_birth>31;
           """
         number = get_query_results(cur, invalid_birthdate_query)[0][0]
         if cnt_invalid_birthdates != int(number):
-            err_cnt = error_message("is_valid_birthdate", number, len(cnt_invalid_birthdates), err_cnt)
+            err_cnt = error_message("is_valid_birthdate", number, cnt_invalid_birthdates, err_cnt)
 
         # test calculate_age
         too_old_query = """
           SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
-          WHERE CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <= DATE_SUB(NOW(), INTERVAL 150 YEAR);
+          WHERE d.patient_status='AC' AND d.year_of_birth is not NULL and d.month_of_birth is not NULL
+          AND d.date_of_birth is not NULL AND
+          CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <= DATE_SUB(NOW(), INTERVAL 150 YEAR);
           """
         number = get_query_results(cur, too_old_query)[0][0]
-        if cnt_ac_patients != int(number):
-            err_cnt = error_message("calculate_age", number, cnt_ac_patients, err_cnt)
+        if cnt_ac_patients_over150 != int(number):
+            err_cnt = error_message("calculate_age", number, cnt_ac_patients_over150, err_cnt)
 
         # test elderly (number of elderly on start date which was 4 months ago)
         elderly_patients_dict = elderly(all_patients_dict, start)
@@ -599,7 +602,9 @@ if __name__ == '__main__':
                AND d.month_of_birth >= 1 AND d.month_of_birth <= 12
                AND d.date_of_birth >= 1 AND d.date_of_birth <= 31
                AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=
-               DATE_SUB( DATE_SUB(DATE_SUB(NOW(), INTERVAL 1 DAY), INTERVAL 4 MONTH), INTERVAL 65 YEAR);
+               DATE_SUB( DATE_SUB(DATE_SUB(NOW(), INTERVAL 1 DAY), INTERVAL 4 MONTH), INTERVAL 65 YEAR)
+               AND CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) >
+               DATE_SUB( DATE_SUB(DATE_SUB(NOW(), INTERVAL 1 DAY), INTERVAL 4 MONTH), INTERVAL 150 YEAR);
                """
         number = get_query_results(cur, cnt_elderly_query)[0][0]
         if cnt_elderly != int(number):
@@ -676,7 +681,8 @@ if __name__ == '__main__':
         test_query = """
            select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no
            where dr.archived!=1 and de.patient_status='AC' and
-           (ATC!='' and ATC is not NULL) and (regional_identifier!='' and regional_identifier is not NULL);
+           (ATC!='' and ATC is not NULL and ATC not like '%null') and
+           (regional_identifier!='' and regional_identifier is not NULL and regional_identifier not like '%null');
             """
         number = get_query_results(cur, test_query)[0][0]
         if cnt_coded != number:
@@ -686,12 +692,13 @@ if __name__ == '__main__':
         dx_dict = get_dxresearch(cur)
         # query counts number of patients with problem list
         test_query = """
-            select count(*) from (select distinct demographic_no from dxresearch where status!='D') x;
+            select count(*) from
+            (select distinct demographic_no from dxresearch where status!='D' and coding_system='icd9') x;
             """
         number = get_query_results(cur, test_query)[0][0]
         if len(dx_dict) != int(number):
             err_cnt = error_message("get_dxresearch", number, len(dx_dict), err_cnt)
-        test_query = "select count(*) from dxresearch where status!='D';"
+        test_query = "select count(*) from dxresearch where status!='D' and coding_system='icd9';"
         number = get_query_results(cur, test_query)[0][0]
         if sum_dict_values(dx_dict) != number:
             err_cnt = error_message("sum_dict_values", number, sum_dict_values(dx_dict), err_cnt)
