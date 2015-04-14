@@ -8,11 +8,12 @@
 // mysql> SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
 //   WHERE d.patient_status = 'AC' AND
 //   CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=
-//   DATE_SUB( DATE_SUB(NOW(), INTERVAL 121 DAY), INTERVAL 65 YEAR);
+//   DATE_SUB( DATE_SUB(NOW(), INTERVAL 4 MONTH), INTERVAL 65 YEAR);
 
 function map(patient) {
 
-    var v1_age = 65;
+    var ageElderly = 65;
+    var ageMax = 150;
 
     // Months are counted from 0 in Javascript so August is 7, for instance.
     var now = new Date();  // no parameters or yyyy,mm,dd if specified
@@ -38,13 +39,16 @@ function map(patient) {
     }
 
     // Checks if patient is older than ageLimit at start of window
-    function targetPopulation(ageLimit) {
-        return (patient.age(start) >= ageLimit);
+    function targetPopulation(ageLimit, ageUpper) {
+        if (ageUpper === undefined) {
+            ageUpper = ageMax;
+        }
+        return (patient.age(start) >= ageLimit) &&  (patient.age(start) <= ageUpper);
     }
 
     emit('denominator', 1);
     emit('numerator', 0);
-    if (currentRec && targetPopulation(v1_age)) {
+    if (currentRec && targetPopulation(ageElderly)) {
         emit('numerator', 1);
     }
 }

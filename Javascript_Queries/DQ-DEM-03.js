@@ -3,7 +3,7 @@
  */
 // Title: What percentage of patients, calculated as active, has an invalid date of birth?
 // Description: DQ-DEM-03
-// Note: Checks for patients that are more than 120 years old or younger than yesterday.
+// Note: Checks for patients that are more than 150 years old or younger than yesterday.
 // A potentially useful check to add would be that the patient was born before the first recorded encounter.
 
 function map(patient) {
@@ -11,11 +11,10 @@ function map(patient) {
   var drugList = patient.medications();
   var encounterList = patient.encounters();
 
-  // Months are counted from 0 in Javascript so August is 7, for instance.
-  var now = new Date();  // no parameters or yyyy,mm,dd if specified
-  var start = addDate(now, -2, 0, -1); // 24 month study window; generally most
-  var end = addDate(now, 0, 0, -1);    // recent records are from previous day
-  var currentRec = currentRecord(now);
+  var refDate = setStoppRefDate();
+  var start = addDate(refDate, -2, 0, -1); // 24 month study window; generally most
+  var end = addDate(refDate, 0, 0, -1);    // recent records are from previous day
+  var currentRec = currentRecord(end);
 
   var age = patient.age(end);
 
@@ -30,11 +29,7 @@ function map(patient) {
 
   // Test that record is current (as of day before date at 0:00AM)
   function currentRecord(date) {
-    var daybefore = new Date(date);
-    daybefore.setDate(daybefore.getDate() - 1);
-    daybefore.setHours(0,0);
-    return patient['json']['effective_time'] > daybefore / 1000;
-
+    return patient['json']['effective_time'] > date / 1000;
   }
 
   // Checks for encounter between start and end dates
@@ -89,7 +84,7 @@ function map(patient) {
 
   // Checks if patient is out of age range
   function incorrectAge() {
-     return (age === null || typeof age == 'undefined' || Number.isNaN(age) || age < 0 || age > 120);// || hasInvalidEncounterDate(patient.birthtime()));
+     return (age === null || typeof age == 'undefined' || Number.isNaN(age) || age < 0 || age > 150);// || hasInvalidEncounterDate(patient.birthtime()));
   }
 
   emit('denominator', 0);

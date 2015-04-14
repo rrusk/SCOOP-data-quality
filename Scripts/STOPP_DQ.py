@@ -13,7 +13,7 @@ import csv
 import datetime
 from datetime import date
 import collections
-#  from collections import defaultdict
+# from collections import defaultdict
 
 # if import MySQLdb fails (for Ubuntu 14.04.1) run 'sudo apt-get install python-mysqldb'
 import MySQLdb as Mdb
@@ -287,7 +287,7 @@ def is_long_term(med):
 
 
 def is_coded(med):
-    if med[0] == '' or med[0] == ' ' or med[0] == '   ' or med[0] is None or 'null' in med[0]\
+    if med[0] == '' or med[0] == ' ' or med[0] == '   ' or med[0] is None or 'null' in med[0] \
             or med[1] == '' or med[1] is None or ' ' in med[1] or 'null' in med[1]:
         return False
     return True
@@ -308,7 +308,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
     if is_prn(med):
         multiplier = prn_multiplier
     tdelta = med_end - med_start
-    med_end_mod = med_start + datetime.timedelta(seconds=multiplier*tdelta.total_seconds())
+    med_end_mod = med_start + datetime.timedelta(seconds=multiplier * tdelta.total_seconds())
     # if long-term or between med start and end dates return true
     if is_long_term(med) or (ref_date <= med_end_mod):
         return True
@@ -354,6 +354,22 @@ def relevant_drugs(demographic_dict, drug_dict):
     for dkey in drug_dict:
         if is_active(demographic_dict, dkey):
             result[dkey] = drug_dict[dkey]
+    return result
+
+
+def calculated_active_patients(end_date, patient_dict, encounter_dict, med_dict=None):
+    result = {}
+    start24monthsago = end_date + relativedelta(months=-24)
+    default = None
+    for dkey in patient_dict:
+        if is_active(patient_dict, dkey):
+            edict = encounter_dict.get(dkey, default)
+            mlist = None
+            if med_dict:
+                mlist = med_dict.get(dkey, default)
+            if (edict and had_encounter(edict, start24monthsago, end_date)) or \
+                    (mlist and had_rx_encounter(mlist, start24monthsago, end_date)):
+                result[dkey] = patient_dict[dkey]
     return result
 
 

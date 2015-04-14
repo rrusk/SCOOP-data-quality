@@ -3,18 +3,19 @@
  */
 // Title: What is the percentage of patients, calculated as active, with no documented gender?
 // Description: DQ-DEM-02
-// Note: Checks for patients that are neither male or female.  Oscar E2E exports always record gender as male or female.  Everything else is categorized as UN.
+// Note: Checks for patients that are neither male nor female.
+// Oscar E2E exports always record gender as male or female.
+// Everything else is categorized as UN.
 
 function map(patient) {
 
     var drugList = patient.medications();
     var encounterList = patient.encounters();
 
-    // Months are counted from 0 in Javascript so August is 7, for instance.
-    var now = new Date();  // no parameters or yyyy,mm,dd if specified
-    var start = addDate(now, -2, 0, -1); // 24 month study window; generally most
-    var end = addDate(now, 0, 0, -1);    // recent records are from previous day
-    var currentRec = currentRecord(now);
+    var refDate = setStoppRefDate();
+    var start = addDate(refDate, -2, 0, -1); // 24 month study window; generally most
+    var end = addDate(refDate, 0, 0, -1);    // recent records are from previous day
+    var currentRec = currentRecord(end);
 
     // Shifts date by year, month, and date specified
     function addDate(date, y, m, d) {
@@ -27,10 +28,7 @@ function map(patient) {
 
     // Test that record is current (as of day before date at 0:00AM)
     function currentRecord(date) {
-        var daybefore = new Date(date);
-        daybefore.setDate(daybefore.getDate() - 1);
-        daybefore.setHours(0, 0);
-        return patient['json']['effective_time'] > daybefore / 1000;
+        return patient['json']['effective_time'] > date / 1000;
 
     }
 

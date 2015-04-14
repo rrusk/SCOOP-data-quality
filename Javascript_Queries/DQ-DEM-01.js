@@ -27,11 +27,7 @@ function map(patient) {
 
   // Test that record is current (as of day before date at 0:00AM)
   function currentRecord(date) {
-    var daybefore = new Date(date);
-    daybefore.setDate(daybefore.getDate() - 1);
-    daybefore.setHours(0,0);
-    return patient['json']['effective_time'] > daybefore / 1000;
-
+    return patient['json']['effective_time'] > date / 1000;
   }
 
   // Checks for encounter between start and end dates

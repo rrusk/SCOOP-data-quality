@@ -68,14 +68,52 @@ try:
     for a_key in active_patients_dict:
         cnt_active += 1
         edict = all_encounters_dict.get(a_key, the_default)
-        med_dict = considered_drugs_dict.get(a_key, the_default)
+        mlist = considered_drugs_dict.get(a_key, the_default)
         if (edict and DQ.had_encounter(edict, start24monthsago, end)) or \
-                (med_dict and DQ.had_rx_encounter(med_dict, start24monthsago, end)):
+                (mlist and DQ.had_rx_encounter(mlist, start24monthsago, end)):
             cnt_active_with_encounter += 1
     print("Number of active patients: " + str(cnt_active))
     print("Number of active patients with encounter in past 24 months: " + str(cnt_active_with_encounter))
     percentage = 100.0 * cnt_active_with_encounter / cnt_active
     print("Percentage of active patients with encounter in past 24 months: " + str(percentage))
+
+    print("\n\nTesting DQ-DEM-02:")
+    calc_active_patients_dict = DQ.calculated_active_patients(end, all_patients_dict, all_encounters_dict,
+                                                              all_drugs_dict)
+    den = len(calc_active_patients_dict)
+    num = 0
+    for a_key in calc_active_patients_dict:
+        gender = calc_active_patients_dict[a_key][3]
+        if not (gender.upper() == 'M' or gender.upper() == 'F'):
+            num += 1
+    print("Number of calculated active patients: " + str(den))
+    print("Number with unknown gender: " + str(num))
+    percentage = 100.0 * num / den
+    print("Percentage of calculated active patients neither F or M: " + str(percentage))
+
+    print("\n\nTesting DQ-DEM-03:")
+    num = 0
+    for a_key in calc_active_patients_dict:
+        drec = calc_active_patients_dict[a_key]
+        if not DQ.is_valid_birthdate(drec[0], drec[1], drec[2]) or DQ.calculate_age(drec[0], drec[1],
+                                                                                    drec[2]) < 0 or DQ.calculate_age(
+                drec[0], drec[1], drec[2]) > 150:
+            num += 1
+    print("Number of calculated active patients: " + str(den))
+    print("Number with invalid date of birth: " + str(num))
+    percentage = 100.0 * num / den
+    print("Percentage of calculated active patients with invalid date of birth: " + str(percentage))
+
+    print("\n\nTesting DQ-DEM-04:")
+    num = 0
+    for a_key in calc_active_patients_dict:
+        drec = calc_active_patients_dict[a_key]
+        if DQ.calculate_age(drec[0], drec[1], drec[2]) > 150:
+            num += 1
+    print("Number of calculated active patients: " + str(den))
+    print("Number with undocumented date of birth: " + str(num))
+    percentage = 100.0 * num / den
+    print("Percentage of calculated active patients with undocumented date of birth: " + str(percentage))
 
     print("\n\nTesting DQ-MED-01:")
     current_med = 0
@@ -111,21 +149,23 @@ try:
     percentage = 100.0 * coded_med / current_med
     print("Percentage of current medications that are coded: " + str(percentage))
 
+    print("\n\nTesting DQ-MED-02:")
+
     # print("\n\nTesting DQ-MED-01 v2:")
     # current_med = 0
     # coded_med = 0
     # cnt_demographics = 0
     # cnt_ac_demographics = 0
     # for demographics_key in all_drugs_dict:
-    #     cnt_demographics += 1
-    #     if DQ.is_active(all_patients_dict, demographics_key):
-    #         cnt_ac_demographics += 1
-    #         patients_drug_list = all_drugs_dict[demographics_key]
-    #         # logic here depends on drugs list being sorted by DIN, etc.
-    #         for drug in patients_drug_list:
-    #             if drug[1] == '' or drug[1] is None:
-    #                 current_din = 'null'
-    #             else:
+    # cnt_demographics += 1
+    # if DQ.is_active(all_patients_dict, demographics_key):
+    # cnt_ac_demographics += 1
+    # patients_drug_list = all_drugs_dict[demographics_key]
+    # # logic here depends on drugs list being sorted by DIN, etc.
+    # for drug in patients_drug_list:
+    # if drug[1] == '' or drug[1] is None:
+    # current_din = 'null'
+    # else:
     #                 current_din = drug[1]
     #                 if len(current_din) != 8:
     #                     print("DEBUG: current_din: " + str(current_din))
@@ -164,6 +204,19 @@ try:
     # print("Number of current medications that are coded: " + str(coded_med))
     # percentage = 100.0 * coded_med / current_med
     # print("Percentage of current medications that are coded: " + str(percentage))
+
+    print("\n\nTesting DQ-MED-03: What percentage of patients, calculated as active, has no current medications?")
+    # num = 0
+    # for a_key in calc_active_patients_dict:
+    #     drec = calc_active_patients_dict[a_key]
+    #     if not DQ.is_valid_birthdate(drec[0], drec[1], drec[2]) or DQ.calculate_age(drec[0], drec[1],
+    #                                                                                 drec[2]) < 0 or DQ.calculate_age(
+    #             drec[0], drec[1], drec[2]) > 150:
+    #         num += 1
+    # print("Number of calculated active patients: " + str(den))
+    # print("Number with invalid date of birth: " + str(num))
+    # percentage = 100.0 * num / den
+    # print("Percentage of calculated active patients with invalid date of birth: " + str(percentage))
 
     print("\n\nTesting STOPP Rule A02:")
     any_drugs = ["C03C"]

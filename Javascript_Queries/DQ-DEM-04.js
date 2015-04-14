@@ -3,18 +3,17 @@
  */
 // Title: What percentage of patients, calculated as active, has no documented date of birth?
 // Description: DQ-DEM-04
-// Note: Checks for patients that are more than 120 years old.  The Oscar E2E records set birthDate to 0001,01,01 if not otherwise recorded.
+// Note: Checks for patients that are more than 150 years old.  The Oscar E2E records set birthDate to 0001,01,01 if not otherwise recorded.
 
 function map(patient) {
 
   var drugList = patient.medications();
   var encounterList = patient.encounters();
 
-  // Months are counted from 0 in Javascript so August is 7, for instance.
-  var now = new Date();  // no parameters or yyyy,mm,dd if specified
-  var start = addDate(now, -2, 0, -1); // 24 month study window; generally most
-  var end = addDate(now, 0, 0, -1);    // recent records are from previous day
-  var currentRec = currentRecord(now);
+  var refDate = setStoppRefDate();
+  var start = addDate(refDate, -2, 0, -1); // 24 month study window; generally most
+  var end = addDate(refDate, 0, 0, -1);    // recent records are from previous day
+  var currentRec = currentRecord(end);
 
   var age = patient.age(end);
 
@@ -29,10 +28,7 @@ function map(patient) {
 
   // Test that record is current (as of day before date at 0:00AM)
   function currentRecord(date) {
-    var daybefore = new Date(date);
-    daybefore.setDate(daybefore.getDate() - 1);
-    daybefore.setHours(0,0);
-    return patient['json']['effective_time'] > daybefore / 1000;
+    return patient['json']['effective_time'] > date / 1000;
 
   }
 
@@ -65,7 +61,7 @@ function map(patient) {
 
   // Checks if patient is out of age range
   function incorrectAge() {
-     return (age === null || typeof age === 'undefined' || Number.isNaN(age) || age > 120);
+     return (age === null || typeof age === 'undefined' || Number.isNaN(age) || age > 150);
   }
 
   emit('denominator', 0);
