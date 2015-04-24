@@ -98,8 +98,7 @@ def get_dxresearch(cursor):
 def get_encounters(cursor):
     query = """select cmn.demographic_no, cmn.update_date, cmn.observation_date, cmn.provider_no, cmn.signing_provider_no
                from casemgmt_note cmn
-               where cmn.provider_no!=-1
-               and cmn.note_id =
+               where cmn.note_id =
                (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
                order by cmn.observation_date"""
     cursor.execute(query)
@@ -166,16 +165,24 @@ def get_provider_nums(provider_list, study_provider_list):
 
 
 # checks if birthdate is potentially valid
-def is_valid_birthdate(byear, bmonth, bday):
+def is_impossible_birthdate(byear, bmonth, bday):
     if byear is None or bmonth is None or bday is None or int(bmonth) < 1 or int(bmonth) > 12 or int(bday) < 1 or int(
             bday) > 31:
         return False
     return True
 
+# checks whether string in format like 'YYYY-MM-DD' is a valid date
+# A date like '2003-12-23' is valid but '2003-12-00' is not valid.
+def is_valid_date(date_text):
+    try:
+        datetime.datetime.strptime(date_text, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
 
 # calculates patient age at the ref_date which defaults to today
 def calculate_age(byear, bmonth, bday, ref_date=None):
-    if not is_valid_birthdate(byear, bmonth, bday):
+    if not is_impossible_birthdate(byear, bmonth, bday):
         return None
     sdate = ref_date
     if sdate is None:
@@ -264,12 +271,20 @@ def is_active(demographic_dict, demographic_no):
 
 # checks whether the medication list has a code corresponding to specific medications
 # returns true if the medication is long term or hasn't yet reached its end date.
+# Expects medications sorted by DIN so that only the long-term flag of only the most
+# recent medication by DIN is checked (for consistency with Oscar E2E export)
 def has_current_target_medication(med_list, codes, med_end):  # med_start, med_end):
     prefix_list = [code.strip().upper() for code in codes]
     prefixes = tuple(prefix_list)
+    previous_DIN = None
     for med in med_list:
+        if med[2] > med_end:
+            continue  # ignore medications prescribed after reference date
         if med[0] is not None and med[0].strip().upper().startswith(prefixes):
+            previous_DIN = med[0]
             if (med[4] == 1) or (med[2] <= med_end <= med[3]):
+                return True
+            elif med[2] <= med_end <= med[3]:
                 return True
     return False
 
@@ -511,7 +526,9 @@ def d_anydrug_n_notanydrug(patient_dict, problem_dict, drug_dict, encounter_dict
                 provider_list,
                 study_start, study_end)):
             denominator_dict[key] = row
+            print("DEBUG den:", str(row))
             if not has_current_target_medication(drug_list, notanydrug_list, study_end):
+                print("DEBUG num:", str(row))
                 numerator_dict[key] = row
     print("Number of elderly on " + str(anydrug_list) + " seen by study provider in last 4 months: "
           + str(len(denominator_dict)))
@@ -576,26 +593,31 @@ if __name__ == '__main__':
 
         # set up tests of is_valid_birthdate, calculate_age, elderly
         cnt_ac_patients_over150 = 0
-        cnt_invalid_birthdates = 0
+        cnt_impossible_birthdates = 0
+        cnt_invalid_dates = 0
         for d_key in all_patients_dict:
             d_row = all_patients_dict[d_key]
-            if not is_valid_birthdate(d_row[0], d_row[1], d_row[2]):
-                cnt_invalid_birthdates += 1
+            if not is_impossible_birthdate(d_row[0], d_row[1], d_row[2]):
+                cnt_impossible_birthdates += 1
+            if not is_valid_date(d_row[0]+'-'+d_row[1]+'-'+d_row[2]):
+                cnt_invalid_dates +=1
             if calculate_age(d_row[0], d_row[1], d_row[2], start) > 150:
                 if is_active(all_patients_dict, d_key):
                     cnt_ac_patients_over150 += 1
 
         # test is_valid_birthdate
-        if cnt_invalid_birthdates > 0:
-            print("WARN: number of invalid birthdate records: " + str(cnt_invalid_birthdates))
+        if cnt_impossible_birthdates > 0:
+            print("WARN: number of impossible birthdate records: " + str(cnt_impossible_birthdates))
+        if cnt_invalid_dates > 0:
+            print("WARN: number of invalid birthdate records: " + str(cnt_invalid_dates))
         invalid_birthdate_query = """
           select count(*) from demographic
           where year_of_birth is NULL or month_of_birth is NULL or date_of_birth is NULL or
           month_of_birth < 1 or month_of_birth > 12 or date_of_birth<1 or date_of_birth>31;
           """
         number = get_query_results(cur, invalid_birthdate_query)[0][0]
-        if cnt_invalid_birthdates != int(number):
-            err_cnt = error_message("is_valid_birthdate", number, cnt_invalid_birthdates, err_cnt)
+        if cnt_impossible_birthdates != int(number):
+            err_cnt = error_message("is_valid_birthdate", number, cnt_impossible_birthdates, err_cnt)
 
         # test calculate_age
         too_old_query = """
@@ -722,16 +744,16 @@ if __name__ == '__main__':
         # test get_encounters
         all_encounters_dict = get_encounters(cur)
         test_query = """
-            select count(*) from (select distinct cmn.demographic_no from casemgmt_note cmn where cmn.provider_no!=-1
-            and cmn.note_id = (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
+            select count(*) from (select distinct cmn.demographic_no from casemgmt_note cmn
+            where cmn.note_id = (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
             order by cmn.observation_date) x;
             """
         number = get_query_results(cur, test_query)[0][0]
         if len(all_encounters_dict) != number:
             err_cnt = error_message("get_encounters", number, len(all_encounters_dict), err_cnt)
         test_query = """
-            select count(*) from (select cmn.demographic_no from casemgmt_note cmn where cmn.provider_no!=-1 and
-            cmn.note_id = (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
+            select count(*) from (select cmn.demographic_no from casemgmt_note cmn
+            where cmn.note_id = (select max(cmn2.note_id) from casemgmt_note cmn2 where cmn2.uuid = cmn.uuid)
             order by cmn.observation_date) x;
             """
         number = get_query_results(cur, test_query)[0][0]

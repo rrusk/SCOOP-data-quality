@@ -24,8 +24,10 @@ try:
 
     print("provider_list " + str(study_providers))
 
-    end = datetime.date.fromordinal(datetime.date.today().toordinal() - 1)  # yesterday
-    start = end + relativedelta(months=-4)  # four months ago
+    # refdate = datetime.date.today()
+    refdate = datetime.date(2015, 2, 19)
+    end = datetime.date.fromordinal(refdate.toordinal() - 1)  # day prior to refdate
+    start = end + relativedelta(months=-4)  # four months earlier
 
     # connect to database
     con = Mdb.connect(host='127.0.0.1', port=db_port, user=db_user, passwd=db_passwd, db=db_name)
@@ -46,7 +48,7 @@ try:
     cnt_invalid_patients = 0
     for d_key in all_patients_dict:
         d_row = all_patients_dict[d_key]
-        if not DQ.is_valid_birthdate(d_row[0], d_row[1], d_row[2]):
+        if not DQ.is_impossible_birthdate(d_row[0], d_row[1], d_row[2]):
             cnt_invalid_patients += 1
         if DQ.calculate_age(d_row[0], d_row[1], d_row[2], start) > 150:
             cnt_all_patients += 1
@@ -95,10 +97,11 @@ try:
     num = 0
     for a_key in calc_active_patients_dict:
         drec = calc_active_patients_dict[a_key]
-        if not DQ.is_valid_birthdate(drec[0], drec[1], drec[2]) or DQ.calculate_age(drec[0], drec[1],
-                                                                                    drec[2]) < 0 or DQ.calculate_age(
-                drec[0], drec[1], drec[2]) > 150:
+        if not DQ.is_impossible_birthdate(drec[0], drec[1], drec[2]):
             num += 1
+        else:
+            if DQ.calculate_age(drec[0], drec[1], drec[2]) < 0 or DQ.calculate_age(drec[0], drec[1], drec[2]) > 150:
+                num += 1
     print("Number of calculated active patients: " + str(den))
     print("Number with invalid date of birth: " + str(num))
     percentage = 100.0 * num / den
