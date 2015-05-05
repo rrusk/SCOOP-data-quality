@@ -44,7 +44,7 @@ def create_dict_by_demographic_no(mlist):
 
 
 # def create_med_dict(mlist):
-#     mdict = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+# mdict = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
 #     for mlist_row in mlist:
 #         mdict[mlist_row[0]][mlist_row[2]] = [mlist_row[1:]]
 #     return mdict
@@ -171,6 +171,7 @@ def is_impossible_birthdate(byear, bmonth, bday):
         return False
     return True
 
+
 # checks whether string in format like 'YYYY-MM-DD' is a valid date
 # A date like '2003-12-23' is valid but '2003-12-00' is not valid.
 def is_valid_date(date_text):
@@ -179,6 +180,7 @@ def is_valid_date(date_text):
         return True
     except ValueError:
         return False
+
 
 # calculates patient age at the ref_date which defaults to today
 def calculate_age(byear, bmonth, bday, ref_date=None):
@@ -276,12 +278,12 @@ def is_active(demographic_dict, demographic_no):
 def has_current_target_medication(med_list, codes, med_end):  # med_start, med_end):
     prefix_list = [code.strip().upper() for code in codes]
     prefixes = tuple(prefix_list)
-    previous_DIN = None
+    previous_din = None
     for med in med_list:
         if med[2] > med_end:
             continue  # ignore medications prescribed after reference date
         if med[0] is not None and med[0].strip().upper().startswith(prefixes):
-            previous_DIN = med[0]
+            previous_din = med[0]
             if (med[4] == 1) or (med[2] <= med_end <= med[3]):
                 return True
             elif med[2] <= med_end <= med[3]:
@@ -314,7 +316,11 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
     # print("ref_date: " + str(ref_date))
     # print("med[2]: " + str(med[2]))
     #
-    # if ref_date is before medication start date return false
+    # Protects against NULL rx_date.
+    if med[2] is None:
+        return False
+    # If ref_date is before medication start date return false; this tests whether
+    # the prescription was made after the study reference date.
     if med[2] > ref_date:
         return False
     med_start = med[2]
@@ -599,8 +605,8 @@ if __name__ == '__main__':
             d_row = all_patients_dict[d_key]
             if not is_impossible_birthdate(d_row[0], d_row[1], d_row[2]):
                 cnt_impossible_birthdates += 1
-            if not is_valid_date(d_row[0]+'-'+d_row[1]+'-'+d_row[2]):
-                cnt_invalid_dates +=1
+            if not is_valid_date(str(d_row[0]) + '-' + str(d_row[1]) + '-' + str(d_row[2])):
+                cnt_invalid_dates += 1
             if calculate_age(d_row[0], d_row[1], d_row[2], start) > 150:
                 if is_active(all_patients_dict, d_key):
                     cnt_ac_patients_over150 += 1

@@ -15,9 +15,12 @@ function map(patient) {
     var drugList = patient.medications();
     var encounterList = patient.encounters();
 
-    var redDate = setStoppRefDate();
-    var start = addDate(redDate, -2, 0, -1); // 24 month study window; generally most
-    var end = addDate(redDate, 0, 0, -1);    // recent records are from previous day
+
+    var refdateStr = setStoppDQRefDateStr(); // hQuery library function call
+    var refdate = new Date(refdateStr);      // refdateStr is 'yyyy,mm,dd' with mm from 1-12
+    refdate.setHours(23, 59);                // set to end of refdate then subtract one day
+    var start = addDate(refdate, -2, 0, -1); // 24 month study window; generally most
+    var end = addDate(refdate, 0, 0, -1);    // recent records are from previous day
     var currentRec = currentRecord(end);
 
     // Shifts date by year, month, and date specified
@@ -39,9 +42,11 @@ function map(patient) {
         return addDate(start, 0, 0, offset);
     }
 
-    // Test that record is current (as of day before date at 0:00AM)
+    // Test that record is current (as of day before study reference date at 0:00AM)
     function currentRecord(date) {
-        return patient['json']['effective_time'] > date / 1000;
+        var daybefore = new Date(date);
+        daybefore.setHours(0, 0);
+        return patient['json']['effective_time'] > daybefore / 1000;
     }
 
     // Checks for encounter between start and end dates
@@ -62,6 +67,7 @@ function map(patient) {
                 typeof drugList[i].orderInformation().length != 0) {
                 for (var j = 0; j < drugList[i].orderInformation().length; j++) {
                     var drugPrescribed = drugList[i].orderInformation()[j].orderDateTime();
+                    drugPrescribed.setHours(24, 1);  // kludge to get start date to match rx_date in EMR
                     if (drugPrescribed >= startDate && drugPrescribed <= endDate) {
                         return true;
                     }
@@ -72,7 +78,7 @@ function map(patient) {
     }
 
 
-   // Status is active if current long-term medication or before prescription end date
+    // Status is active if current long-term medication or before prescription end date
     function isCurrentDrug(drug) {
         return drug.isLongTerm() || isDrugInWindow(drug);
     }
@@ -82,7 +88,7 @@ function map(patient) {
         var drugEnd = drug.indicateMedicationStop().getTime();
 
         var m = durationMultiplier;
-        if (drug.isPRN()){
+        if (drug.isPRN()) {
             m = prnMultiplier;
         }
         return (endDateOffset(drugStart, drugEnd, m) >= end && drugStart <= end);
@@ -97,12 +103,13 @@ function map(patient) {
         return false;
     }
 
-    emit('denominator', 0);
-    emit('numerator', 0);
+    refdateStr = refdateStr.replace(/,/g, '');
+    emit('denominator_' + refdateStr, 0);
+    emit('numerator_' + refdateStr, 0);
     if (currentRec && (hadEncounter(start, end) || hadRxEncounter(start, end))) {
-            emit('denominator', 1);
+        emit('denominator_' + refdateStr, 1);
         if (!hasCurrentMedication(drugList)) {
-            emit('numerator', 1);
+            emit('numerator_' + refdateStr, 1);
         }
     }
 }
