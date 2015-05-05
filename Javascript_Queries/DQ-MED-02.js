@@ -1,6 +1,6 @@
 /**
  * Created by rrusk on 25/02/15.
- * Modified by rrusk on 2015/05/04.
+ * Modified by rrusk on 2015/05/05.
  */
 // Title: Average number of prescriptions per encounter in the past 12 months
 // Description: DQ-MED-02

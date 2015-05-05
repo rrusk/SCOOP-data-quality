@@ -1,5 +1,6 @@
 /**
  * Created by rrusk on 27/02/15.
+ * Modified by rrusk on 2015/05/05.
  */
 // Title: What percentage of patients, calculated as active, 12 and over, has Diabetes on the problem list?
 // Description: DQ-PL-03
@@ -16,11 +17,12 @@ function map(patient) {
         "ICD9": ["\\b250"]
     };
 
-    // Months are counted from 0 in Javascript so August is 7, for instance.
-    var now = new Date();  // no parameters or yyyy,mm,dd if specified
-    var start = addDate(now, -2, 0, -1); // 24 month window; generally most
-    var end = addDate(now, 0, 0, -1);    // recent records are from previous day
-    var currentRec = currentRecord(now);
+    var refdateStr = setStoppDQRefDateStr();  // hQuery library function call
+    var refdate = new Date(refdateStr);       // refdateStr is 'yyyy,mm,dd' with mm from 1-12
+    refdate.setHours(23, 59);                 // set to end of refdate then subtract one day
+    var start = addDate(refdate, -2, 0, -1);  // 24 month encounter window
+    var end = addDate(refdate, 0, 0, -1);     // recent records are from previous day
+    var currentRec = currentRecord(end);
 
     // Shifts date by year, month, and date specified
     function addDate(date, y, m, d) {
@@ -34,7 +36,6 @@ function map(patient) {
     // Test that record is current (as of day before date at 0:00AM)
     function currentRecord(date) {
         var daybefore = new Date(date);
-        daybefore.setDate(daybefore.getDate() - 1);
         daybefore.setHours(0,0);
         return patient['json']['effective_time'] > daybefore / 1000;
 
@@ -90,12 +91,13 @@ function map(patient) {
         return problemList.regex_match(theDxCodes).length;
     }
 
-    emit('denominator', 0);
-    emit('numerator', 0);
+    refdateStr = refdateStr.replace(/,/g, '');
+    emit('denominator_' + refdateStr, 0);
+    emit('numerator_' + refdateStr, 0);
     if (currentRec && targetPopulation(age) && (hadEncounter(start, end) || hadRxEncounter(start, end))) {
-        emit('denominator', 1);
+        emit('denominator_' + refdateStr, 1);
         if (hasProblemCode(targetProblemCodes)) {
-            emit('numerator', 1);
+            emit('numerator_' + refdateStr, 1);
         }
     }
 }

@@ -1,5 +1,6 @@
 /**
  * Created by rrusk on 27/02/15.
+ * Modified by rrusk on 2015/05/05.
  */
 // Title: Of patients with a current Levothyroxine medication, what percentage has Hypothyroidism on the problem list?
 // Description: DQ-PL-05
@@ -21,10 +22,12 @@ function map(patient) {
     var durationMultiplier = 1.2;
     var prnMultiplier = 2.0;
 
-    // Months are counted from 0 in Javascript so August is 7, for instance.
-    var now = new Date();  // no parameters or yyyy,mm,dd if specified
-    var end = addDate(now, 0, 0, -1);    // recent records are from previous day
-    var currentRec = currentRecord(now);
+    var refdateStr = setStoppDQRefDateStr();  // hQuery library function call
+    var refdate = new Date(refdateStr);       // refdateStr is 'yyyy,mm,dd' with mm from 1-12
+    refdate.setHours(23, 59);                 // set to end of refdate then subtract one day
+    //var start = addDate(refdate, -2, 0, -1);  // 24 month encounter window
+    var end = addDate(refdate, 0, 0, -1);     // recent records are from previous day
+    var currentRec = currentRecord(end);
 
     // Shifts date by year, month, and date specified
     function addDate(date, y, m, d) {
@@ -48,69 +51,75 @@ function map(patient) {
     // Test that record is current (as of day before date at 0:00AM)
     function currentRecord(date) {
         var daybefore = new Date(date);
-        daybefore.setDate(daybefore.getDate() - 1);
-        daybefore.setHours(0,0);
+        daybefore.setHours(0, 0);
         return patient['json']['effective_time'] > daybefore / 1000;
 
     }
 
     // Checks for patients with DxCode
     function hasProblemCode(theDxCodes) {
-        /*list = problemList.regex_match(theDxCodes);
-        for (var i = 0; i < list.length; i++) {
-            emit(list[i]['json']['codes']['ICD9'], 1);
-        }
-        for (var i = 0; i < problemList.length; i++) {
-            if (problemList[i].regex_includesCodeFrom(theDxCodes)) {
-                emit(problemList[i]['json']['codes']['ICD9'], 1);
-            }
-        }*/
         return problemList.regex_match(theDxCodes).length;
     }
 
-    // Uses statusOfMedication to determine if drug is current.
-    // Active if, when E2E record was exported, medication was long-term or before end date.
-    // Test only makes sense for current records.
-    function isActiveDrug(drug) {
-        var status = drug['json']['statusOfMedication']['value'];
-        return currentRec && (status === 'active');
-    }
-
-    // Test for PRN flag
-    function isPRN(drug) {
-        return (drug.freeTextSig().indexOf(" E2E_PRN flag") !== -1);
+    // Status is active if current long-term medication or before prescription end date
+    function isCurrentDrug(drug) {
+        return drug.isLongTerm() || isDrugInWindow(drug);
     }
 
     function isDrugInWindow(drug) {
-        var drugStart = drug.indicateMedicationStart().getTime();
-        var drugEnd = drug.indicateMedicationStop().getTime();
-
+        var drugStart = drug.indicateMedicationStart();
+        var drugStartInt = drugStart.getTime();
+        var drugEnd = drug.indicateMedicationStop();
+        var drugEndInt = drugEnd.getTime();
         var m = durationMultiplier;
-        if (isPRN(drug)) {
+        if (drug.isPRN()) {  // PRN only captured at medication level at present
             m = prnMultiplier;
         }
-        return (endDateOffset(drugStart, drugEnd, m) >= end && drugStart <= end);
+        var modDrugEnd = endDateOffset(drugStartInt, drugEndInt, m);
+        drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
+        modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date
+        if (modDrugEnd >= end && drugStart <= end) {
+            // emit('demo1='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
+            return true;
+        } else {
+            // need to also search older prescriptions
+            if (typeof drug.orderInformation() !== 'undefined' &&
+                typeof drug.orderInformation().length != 0) {
+                for (var j = 0; j < drug.orderInformation().length; j++) {
+                    drugStart = drug.orderInformation()[j].orderDateTime();
+                    drugEnd = drug.orderInformation()[j].orderExpirationDateTime();
+                    // PRN for individual prescriptions is not currently captured from E2E document
+                    modDrugEnd = endDateOffset(drugStart, drugEnd, m);
+                    drugStart.setHours(24, 1);
+                    modDrugEnd.setHours(47, 59);
+                    if (modDrugEnd >= end && drugStart <= end) {
+                        // emit('demo2='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
-    // Check for current medications
+    // Check for medications
     function hasCurrentTargetMedication(takenDrugs, theTargetDrugs) {
         var list = takenDrugs.regex_match(theTargetDrugs);
         for (var i = 0; i < list.length; i++) {
-            if (isActiveDrug(list[i]) || isDrugInWindow(list[i])) {
-                //emit(list[i]['json']['codes']['whoATC'], 1);
+            if (isCurrentDrug(list[i])) {
                 return true;
             }
         }
-        return false
+        return false;
     }
 
-    emit('denominator', 0);
-    emit('numerator', 0);
-
+    refdateStr = refdateStr.replace(/,/g, '');
+    emit('denominator_' + refdateStr, 0);
+    emit('numerator_' + refdateStr, 0);
     if (currentRec && hasCurrentTargetMedication(drugList, targetMedications)) {
-        emit('denominator', 1);
+        emit('denominator_' + refdateStr, 1);
         if (hasProblemCode(targetProblemCodes)) {
-            emit('numerator', 1);
+            emit('numerator_' + refdateStr, 1);
         }
     }
 }

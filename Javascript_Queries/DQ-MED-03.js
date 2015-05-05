@@ -1,10 +1,12 @@
 /**
  * Created by rrusk on 25/02/15.
- */
+ * Modified by rrusk on 2015/05/05.
+*/
 // Title: What percentage of patients, calculated as active, has no current medications?
 // Description: DQ-MED-03
-// Note: All current records in endpoint have an active status since the Oscar E2E exporter only emits documents of active patients.
-
+// Note 1: All current records in endpoint have an active status since the Oscar E2E exporter
+//         only emits documents of active patients.
+// Note 2: Uses both case management notes and prescription events to determine active status
 
 function map(patient) {
 
@@ -14,7 +16,6 @@ function map(patient) {
 
     var drugList = patient.medications();
     var encounterList = patient.encounters();
-
 
     var refdateStr = setStoppDQRefDateStr(); // hQuery library function call
     var refdate = new Date(refdateStr);      // refdateStr is 'yyyy,mm,dd' with mm from 1-12
@@ -84,14 +85,39 @@ function map(patient) {
     }
 
     function isDrugInWindow(drug) {
-        var drugStart = drug.indicateMedicationStart().getTime();
-        var drugEnd = drug.indicateMedicationStop().getTime();
-
+        var drugStart = drug.indicateMedicationStart();
+        var drugStartInt = drugStart.getTime();
+        var drugEnd = drug.indicateMedicationStop();
+        var drugEndInt = drugEnd.getTime();
         var m = durationMultiplier;
-        if (drug.isPRN()) {
+        if (drug.isPRN()) {  // PRN only captured at medication level at present
             m = prnMultiplier;
         }
-        return (endDateOffset(drugStart, drugEnd, m) >= end && drugStart <= end);
+        var modDrugEnd = endDateOffset(drugStartInt, drugEndInt, m);
+        drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
+        modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date
+        if (modDrugEnd >= end && drugStart <= end) {
+            // emit('demo1='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
+            return true;
+        } else {
+            // need to also search older prescriptions
+            if (typeof drug.orderInformation() !== 'undefined' &&
+                typeof drug.orderInformation().length != 0) {
+                for (var j = 0; j < drug.orderInformation().length; j++) {
+                    drugStart = drug.orderInformation()[j].orderDateTime();
+                    drugEnd = drug.orderInformation()[j].orderExpirationDateTime();
+                    // PRN for individual prescriptions is not currently captured from E2E document
+                    modDrugEnd = endDateOffset(drugStart, drugEnd, m);
+                    drugStart.setHours(24, 1);
+                    modDrugEnd.setHours(47, 59);
+                    if (modDrugEnd >= end && drugStart <= end) {
+                        // emit('demo2='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     function hasCurrentMedication(drugList) {
