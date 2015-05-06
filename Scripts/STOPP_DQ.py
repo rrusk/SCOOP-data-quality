@@ -316,8 +316,8 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
     # print("ref_date: " + str(ref_date))
     # print("med[2]: " + str(med[2]))
     #
-    # Protects against NULL rx_date.
-    if med[2] is None:
+    # Protects against NULL rx_date, end_date.
+    if med[2] is None or med[3] is None:
         return False
     # If ref_date is before medication start date return false; this tests whether
     # the prescription was made after the study reference date.
@@ -328,7 +328,11 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
     multiplier = duration_multiplier
     if is_prn(med):
         multiplier = prn_multiplier
-    tdelta = med_end - med_start
+    try:
+        tdelta = med_end - med_start
+    except ValueError:
+        print "DEBUG: ", str(med)
+        return False
     med_end_mod = med_start + datetime.timedelta(seconds=multiplier * tdelta.total_seconds())
     # if long-term or between med start and end dates return true
     if is_long_term(med) or (ref_date <= med_end_mod):

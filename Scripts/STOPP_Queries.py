@@ -138,12 +138,12 @@ try:
                     current_din = drug[1]
                     if len(current_din) != 8:
                         print("DEBUG: current_din: " + str(current_din))
-                if previous_din != current_din or (current_din == 'null'):
-                    previous_din = current_din
-                    if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
-                        current_med += 1
-                        if current_din != "null":
-                            coded_med += 1
+                # if previous_din != current_din or (current_din == 'null'):
+                previous_din = current_din
+                if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
+                    current_med += 1
+                    if current_din != "null":
+                        coded_med += 1
 
     # print("Number of patients with medications: " + str(cnt_demographics))
     # print("Number of active patients with medications: " + str(cnt_ac_demographics))
@@ -169,7 +169,7 @@ try:
     # if drug[1] == '' or drug[1] is None:
     # current_din = 'null'
     # else:
-    #                 current_din = drug[1]
+    # current_din = drug[1]
     #                 if len(current_din) != 8:
     #                     print("DEBUG: current_din: " + str(current_din))
     #             if True:  # previous_din != current_din:
