@@ -45,7 +45,7 @@ def create_dict_by_demographic_no(mlist):
 
 # def create_med_dict(mlist):
 # mdict = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-#     for mlist_row in mlist:
+# for mlist_row in mlist:
 #         mdict[mlist_row[0]][mlist_row[2]] = [mlist_row[1:]]
 #     return mdict
 #
@@ -275,19 +275,22 @@ def is_active(demographic_dict, demographic_no):
 # returns true if the medication is long term or hasn't yet reached its end date.
 # Expects medications sorted by DIN so that only the long-term flag of only the most
 # recent medication by DIN is checked (for consistency with Oscar E2E export)
-def has_current_target_medication(med_list, codes, med_end):  # med_start, med_end):
+def has_current_target_medication(med_list, codes, med_end, duration_multiplier=1.0, prn_multiplier=1.0):
     prefix_list = [code.strip().upper() for code in codes]
     prefixes = tuple(prefix_list)
-    previous_din = None
+    # previous_din = None
     for med in med_list:
-        if med[2] > med_end:
-            continue  # ignore medications prescribed after reference date
-        if med[0] is not None and med[0].strip().upper().startswith(prefixes):
-            previous_din = med[0]
-            if (med[4] == 1) or (med[2] <= med_end <= med[3]):
-                return True
-            elif med[2] <= med_end <= med[3]:
-                return True
+        if med[2]:  # unfortunately some clinics have NULL for rx_date in drug table
+            if med[2] > med_end:
+                continue  # ignore medications prescribed after reference date
+            if med[0] is not None and med[0].strip().upper().startswith(prefixes):
+                # previous_din = med[0]
+                # if (med[4] == 1) or (med[2] <= med_end <= med[3]):
+                #     return True
+                # elif med[2] <= med_end <= med[3]:
+                #     return True
+                if is_current_medication(med, med_end, duration_multiplier, prn_multiplier):
+                    return True
     return False
 
 
@@ -311,7 +314,7 @@ def is_coded(med):
 
 
 # Checks whether the medication is long-term or hasn't reached its end date
-# Applies a duration multipler.
+# Applies a duration multiplier.
 def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier=1.0):
     # print("ref_date: " + str(ref_date))
     # print("med[2]: " + str(med[2]))

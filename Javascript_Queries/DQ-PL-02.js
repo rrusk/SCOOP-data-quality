@@ -22,8 +22,6 @@ function map(patient) {
     var end = addDate(refdate, 0, 0, -1);     // recent records are from previous day
     var currentRec = currentRecord(end);
 
-    var age = patient.age(end);
-
     // Shifts date by year, month, and date specified
     function addDate(date, y, m, d) {
         var n = new Date(date);
