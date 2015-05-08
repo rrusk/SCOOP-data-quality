@@ -168,8 +168,8 @@ def get_provider_nums(provider_list, study_provider_list):
 def is_impossible_birthdate(byear, bmonth, bday):
     if byear is None or bmonth is None or bday is None or int(bmonth) < 1 or int(bmonth) > 12 or int(bday) < 1 or int(
             bday) > 31:
-        return False
-    return True
+        return True
+    return False
 
 
 # checks whether string in format like 'YYYY-MM-DD' is a valid date
@@ -184,7 +184,7 @@ def is_valid_date(date_text):
 
 # calculates patient age at the ref_date which defaults to today
 def calculate_age(byear, bmonth, bday, ref_date=None):
-    if not is_impossible_birthdate(byear, bmonth, bday):
+    if is_impossible_birthdate(byear, bmonth, bday):
         return None
     sdate = ref_date
     if sdate is None:
@@ -307,15 +307,15 @@ def is_long_term(med):
 
 
 def is_coded(med):
-    if med[0] == '' or med[0] == ' ' or med[0] == '   ' or med[0] is None or 'null' in med[0] \
-            or med[1] == '' or med[1] is None or ' ' in med[1] or 'null' in med[1]:
+    if (med[0] is None or med[0].strip() == '' or ('null' in med[0].lower())) \
+            and (med[1] is None or med[1].strip() == '' or ('null' in med[1].lower())):
         return False
     return True
 
 
 # Checks whether the medication is long-term or hasn't reached its end date
 # Applies a duration multiplier.
-def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier=1.0):
+def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier=1.0, set_longterm=None, set_prn=None):
     # print("ref_date: " + str(ref_date))
     # print("med[2]: " + str(med[2]))
     #
@@ -329,7 +329,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
     med_start = med[2]
     med_end = med[3]
     multiplier = duration_multiplier
-    if is_prn(med):
+    if set_prn or is_prn(med):
         multiplier = prn_multiplier
     try:
         tdelta = med_end - med_start
@@ -338,7 +338,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
         return False
     med_end_mod = med_start + datetime.timedelta(seconds=multiplier * tdelta.total_seconds())
     # if long-term or between med start and end dates return true
-    if is_long_term(med) or (ref_date <= med_end_mod):
+    if (set_longterm or is_long_term(med)) or (ref_date <= med_end_mod):
         return True
     return False
 
@@ -375,7 +375,7 @@ def elderly(ddict, ref_date, check_status=True):
     return result
 
 
-# Create a drugs dictionary for active patients.
+# Create a drugs dictionary for active, that is 'AC'  patients.
 # Currently, Oscar E2E exports only include patients with 'AC' status.
 def relevant_drugs(demographic_dict, drug_dict):
     result = {}
@@ -390,6 +390,7 @@ def calculated_active_patients(end_date, patient_dict, encounter_dict, med_dict=
     start24monthsago = end_date + relativedelta(months=-24)
     default = None
     for dkey in patient_dict:
+        # TODO: determine active for end_date rather than date of query
         if is_active(patient_dict, dkey):
             edict = encounter_dict.get(dkey, default)
             mlist = None
@@ -610,7 +611,7 @@ if __name__ == '__main__':
         cnt_invalid_dates = 0
         for d_key in all_patients_dict:
             d_row = all_patients_dict[d_key]
-            if not is_impossible_birthdate(d_row[0], d_row[1], d_row[2]):
+            if is_impossible_birthdate(d_row[0], d_row[1], d_row[2]):
                 cnt_impossible_birthdates += 1
             if not is_valid_date(str(d_row[0]) + '-' + str(d_row[1]) + '-' + str(d_row[2])):
                 cnt_invalid_dates += 1
@@ -732,8 +733,8 @@ if __name__ == '__main__':
         test_query = """
            select count(*) from drugs dr join demographic de on dr.demographic_no=de.demographic_no
            where dr.archived!=1 and de.patient_status='AC' and
-           (ATC!='' and ATC is not NULL and ATC not like '%null') and
-           (regional_identifier!='' and regional_identifier is not NULL and regional_identifier not like '%null');
+           ((ATC!='' and ATC is not NULL and ATC not like '%null') or
+           (regional_identifier!='' and regional_identifier is not NULL and regional_identifier not like '%null'));
             """
         number = get_query_results(cur, test_query)[0][0]
         if cnt_coded != number:

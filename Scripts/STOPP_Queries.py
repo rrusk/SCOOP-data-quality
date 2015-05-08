@@ -31,8 +31,8 @@ try:
     start_12mo_ago = end + relativedelta(months=-12)  # 12 months earlier
     start_24mo_ago = end + relativedelta(months=-24)  # 24 months earlier
     print "REFERENCE DATE: ", str(refdate)
-    print "END DATE: ", str(end)
-    print "4 Mo Prev:", str(start_4mo_ago)
+    print "  END DATE:", str(end)
+    print " 4 Mo Prev:", str(start_4mo_ago)
     print "12 Mo Prev:", str(start_12mo_ago)
     print "24 Mo Prev:", str(start_24mo_ago)
     # connect to database
@@ -47,42 +47,74 @@ try:
 
     print("Demographics:")
     all_patients_dict = DQ.get_demographics(cur)
+    # patients with 'AC' status
     active_patients_dict = DQ.active_patients(all_patients_dict)
 
-    cnt_all_patients = 0
+    cnt_too_old_patients = 0
     cnt_ac_patients = 0
-    cnt_invalid_patients = 0
+    cnt_impossible_birthdate = 0
     for d_key in all_patients_dict:
         d_row = all_patients_dict[d_key]
-        if not DQ.is_impossible_birthdate(d_row[0], d_row[1], d_row[2]):
-            cnt_invalid_patients += 1
+        if DQ.is_impossible_birthdate(d_row[0], d_row[1], d_row[2]):
+            cnt_impossible_birthdate += 1
         if DQ.calculate_age(d_row[0], d_row[1], d_row[2], start_4mo_ago) > 150:
-            cnt_all_patients += 1
-            if DQ.is_active(all_patients_dict, d_key):
-                cnt_ac_patients += 1
+            cnt_too_old_patients += 1
+        if DQ.is_active(all_patients_dict, d_key):
+            cnt_ac_patients += 1
+    print " impossible age: ", cnt_impossible_birthdate
+    print "        too old: ", cnt_too_old_patients
+    print "    'ac' status: ", cnt_ac_patients
 
+    # patient 65+ as of 4 month before reference date
     elderly_patients_dict = DQ.elderly(all_patients_dict, start_4mo_ago)
 
+    default = None
     all_drugs_dict = DQ.get_drugs(cur)
+    cnt_missing_demo_nos = 0
+    for demographic_key in all_drugs_dict:
+        demographic = all_patients_dict.get(demographic_key, default)
+        if not demographic:
+            cnt_missing_demo_nos += 1
+            # print "\tDRUG RECORDED WITH DEMO_NO ", str(demographic_key), " MISSING FROM DEMOGRAPHICS: "
+    print "\t", str(cnt_missing_demo_nos), " drug records with demographic number not in demographic table"
+
+    # drug dictionary for patients with 'AC' status
     considered_drugs_dict = DQ.relevant_drugs(all_patients_dict, all_drugs_dict)
+
+    default = None
     dx_dict = DQ.get_dxresearch(cur)
+    cnt_missing_demo_nos = 0
+    for demographic_key in dx_dict:
+        demographic = all_patients_dict.get(demographic_key, default)
+        if not demographic:
+            cnt_missing_demo_nos += 1
+            # print "\tCONDITION RECORDED WITH DEMO_NO ", str(demographic_key), " MISSING FROM DEMOGRAPHICS: "
+    print "\t", str(cnt_missing_demo_nos), " condition records with demographic number not in demographic table"
+
+    default = None
     all_encounters_dict = DQ.get_encounters(cur)
+    cnt_missing_demo_nos = 0
+    for demographic_key in all_encounters_dict:
+        demographic = all_patients_dict.get(demographic_key, default)
+        if not demographic:
+            cnt_missing_demo_nos += 1
+            # print "\tENCOUNTER RECORDED WITH DEMO_NO ", str(demographic_key), " MISSING FROM DEMOGRAPHICS: "
+    print "\t", str(cnt_missing_demo_nos), " encounter records with demographic number not in demographic table"
 
     print("\n\nTesting DQ-DEM-01:")
-    start24monthsago = end + relativedelta(months=-24)
-    cnt_active = 0
-    cnt_active_with_encounter = 0
+    cnt_ac = 0
+    cnt_ac_with_encounter = 0
     the_default = None
     for a_key in active_patients_dict:
-        cnt_active += 1
+        cnt_ac += 1
         edict = all_encounters_dict.get(a_key, the_default)
         mlist = considered_drugs_dict.get(a_key, the_default)
-        if (edict and DQ.had_encounter(edict, start24monthsago, end)) or \
-                (mlist and DQ.had_rx_encounter(mlist, start24monthsago, end)):
-            cnt_active_with_encounter += 1
-    print("Number of active patients: " + str(cnt_active))
-    print("Number of active patients with encounter in past 24 months: " + str(cnt_active_with_encounter))
-    percentage = 100.0 * cnt_active_with_encounter / cnt_active
+        if (edict and DQ.had_encounter(edict, start_24mo_ago, end)) or \
+                (mlist and DQ.had_rx_encounter(mlist, start_24mo_ago, end)):
+            cnt_ac_with_encounter += 1
+    print("Number of active patients: " + str(cnt_ac))
+    print("Number of active patients with encounter in past 24 months: " + str(cnt_ac_with_encounter))
+    percentage = 100.0 * cnt_ac_with_encounter / cnt_ac
     print("Percentage of active patients with encounter in past 24 months: " + str(percentage))
 
     print("\n\nTesting DQ-DEM-02:")
@@ -95,15 +127,15 @@ try:
         if not (gender.upper() == 'M' or gender.upper() == 'F'):
             num += 1
     print("Number of calculated active patients: " + str(den))
-    print("Number with unknown gender: " + str(num))
+    print("Number with neither M nor F gender: " + str(num))
     percentage = 100.0 * num / den
-    print("Percentage of calculated active patients neither F or M: " + str(percentage))
+    print("Percentage of calculated active patients neither F nor M: " + str(percentage))
 
     print("\n\nTesting DQ-DEM-03:")
     num = 0
     for a_key in calc_active_patients_dict:
         drec = calc_active_patients_dict[a_key]
-        if not DQ.is_impossible_birthdate(drec[0], drec[1], drec[2]):
+        if DQ.is_impossible_birthdate(drec[0], drec[1], drec[2]):
             num += 1
         else:
             if DQ.calculate_age(drec[0], drec[1], drec[2]) < 0 or DQ.calculate_age(drec[0], drec[1], drec[2]) > 150:
@@ -117,7 +149,7 @@ try:
     num = 0
     for a_key in calc_active_patients_dict:
         drec = calc_active_patients_dict[a_key]
-        if DQ.calculate_age(drec[0], drec[1], drec[2]) > 150:
+        if drec[0] is None or drec[1] is None or drec[2] is None or drec[0] == '0001':
             num += 1
     print("Number of calculated active patients: " + str(den))
     print("Number with undocumented date of birth: " + str(num))
@@ -126,37 +158,50 @@ try:
 
     print("\n\nTesting DQ-MED-01:")
     current_med = 0
-    coded_med = 0
-    cnt_demographics = 0
-    cnt_ac_demographics = 0
+    current_coded_med = 0
     for demographics_key in all_drugs_dict:
-        cnt_demographics += 1
         if DQ.is_active(all_patients_dict, demographics_key):
-            cnt_ac_demographics += 1
+            current_din = None
+            previous_din = None
+            long_term = None
+            prn = None
             patients_drug_list = all_drugs_dict[demographics_key]
-            # logic here depends on drugs list being sorted by DIN, etc.
-            current_din = 0
-            previous_din = 0
+            # patient's drugs are assumed grouped by DIN, with most recent prescription first
             for drug in patients_drug_list:
-                if drug[1] == '' or drug[1] is None:
-                    current_din = 'null'
-                else:
-                    current_din = drug[1]
-                    if len(current_din) != 8:
-                        # print("DEBUG: current_din: " + str(current_din))
-                        pass
-                # if previous_din != current_din or (current_din == 'null'):
-                previous_din = current_din
-                if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
+                current_din = drug[1]
+                if not DQ.is_coded(drug):
+                    long_term = None
+                    prn = None
+                elif current_din != previous_din:
+                    # use long_term and prn settings of most recent prescription grouped by DIN
+                    long_term = DQ.is_long_term(drug)
+                    prn = DQ.is_prn(drug)
+                    previous_din = current_din
+                if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0,
+                                            set_longterm=long_term, set_prn=prn):
                     current_med += 1
-                    if current_din != "null":
-                        coded_med += 1
+                    if DQ.is_coded(drug):
+                        current_coded_med += 1
+    print("Number of current medications to patients with 'AC' status: " + str(current_med))
+    print("Number that are coded: " + str(current_coded_med))
+    percentage = 100.0 * current_coded_med / current_med
+    print("Percentage of current medications that are coded: " + str(percentage))
 
-    # print("Number of patients with medications: " + str(cnt_demographics))
-    # print("Number of active patients with medications: " + str(cnt_ac_demographics))
-    print("Number of current medications: " + str(current_med))
-    print("Number of current medications that are coded: " + str(coded_med))
-    percentage = 100.0 * coded_med / current_med
+    print("\n\nTesting DQ-MED-01b:")
+    current_med = 0
+    current_coded_med = 0
+    for demographics_key in all_drugs_dict:
+        if DQ.is_active(all_patients_dict, demographics_key):
+            patients_drug_list = all_drugs_dict[demographics_key]
+            # patient's drugs are assumed grouped by DIN, with most recent prescription first
+            for drug in patients_drug_list:
+                if DQ.is_current_medication(drug, end, duration_multiplier=1.0, prn_multiplier=1.0):
+                    current_med += 1
+                    if DQ.is_coded(drug):
+                        current_coded_med += 1
+    print("Number of current medications to patients with 'AC' status: " + str(current_med))
+    print("Number that are coded: " + str(current_coded_med))
+    percentage = 100.0 * current_coded_med / current_med
     print("Percentage of current medications that are coded: " + str(percentage))
 
     print("\n\nTesting DQ-MED-02:")
@@ -164,7 +209,7 @@ try:
     cnt_encounters = 0
     # TODO: Should test active status of patient at reference date.
     # Probably safe to ignore since patients that are not 'AC' are unlikely
-    #       to have either prescriptions or encounters within the last 12 months.
+    # to have either prescriptions or encounters within the last 12 months.
     default = None
     for demographic_key in all_drugs_dict:
         med_list = all_drugs_dict.get(demographic_key, default)
@@ -200,10 +245,10 @@ try:
     # current_din = 'null'
     # else:
     # current_din = drug[1]
-    #                 if len(current_din) != 8:
-    #                     print("DEBUG: current_din: " + str(current_din))
-    #             if True:  # previous_din != current_din:
-    #                 if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
+    # if len(current_din) != 8:
+    # print("DEBUG: current_din: " + str(current_din))
+    # if True:  # previous_din != current_din:
+    # if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
     #                     current_med += 1
     #                     if current_din != "null":
     #                         coded_med += 1
@@ -329,7 +374,8 @@ try:
     for demographic_key in active_patients_dict:
         med_list = all_drugs_dict.get(demographic_key, default)
         if med_list:
-            if DQ.has_current_target_medication(med_list, ['R03BB04'], end, duration_multiplier=1.2, prn_multiplier=2.0):
+            if DQ.has_current_target_medication(med_list, ['R03BB04'], end, duration_multiplier=1.2,
+                                                prn_multiplier=2.0):
                 cnt_has_med += 1
                 prob_list = dx_dict.get(demographic_key, default)
                 if DQ.has_code(prob_list, ['4912', '492', '496']):
@@ -338,7 +384,6 @@ try:
     print("Number with both current Tiotropium and COPD: " + str(cnt_has_prob))
     percentage = 100.0 * cnt_has_prob / cnt_has_med
     print("Percentage with COPD on Tiotropium: " + str(percentage))
-
 
     print("\n\nTesting DQ-PL-05: Of patients with a current Levothyroxine medication, what percentage has"),
     print(" Hypothyroidism on the problem list?")
