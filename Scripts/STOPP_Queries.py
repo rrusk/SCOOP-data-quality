@@ -163,24 +163,18 @@ try:
         if DQ.is_active(all_patients_dict, demographics_key):
             patients_drug_list = all_drugs_dict[demographics_key]
             # patient's drugs are assumed grouped by DIN, with most recent prescription first
+            previous_din = None
             for drug in patients_drug_list:
-                previous_din = None
-                if drug[1] == '' or drug[1] is None:
-                    current_din = 'null'
-                else:
+                if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0, use_longterm=True,
+                                            use_prn=True):
                     current_din = drug[1]
-                if (current_din == 'null') or (current_din != previous_din):
-                    previous_din = current_din
-                    # uses long_term and prn settings of most recent prescription grouped by DIN
-                    long_term = DQ.is_long_term(drug)
-                    prn = DQ.is_prn(drug)
-                    if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0,
-                                                use_longterm=True, use_prn=False):
+                    if (current_din is None or current_din == '') or (current_din != previous_din):
                         current_med += 1
                         if DQ.is_coded(drug):
                             current_coded_med += 1
-                        continue  # found one so go to next drug
-
+                            previous_din = current_din
+                        else:
+                            previous_din = None
     print("Number of current medications to patients with 'AC' status: " + str(current_med))
     print("Number that are coded: " + str(current_coded_med))
     percentage = 100.0 * current_coded_med / current_med
@@ -215,6 +209,31 @@ try:
             previous_din = None
             for drug in patients_drug_list:
                 if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=1.0, use_longterm=False,
+                                            use_prn=False):
+                    current_din = drug[1]
+                    if (current_din is None or current_din == '') or (current_din != previous_din):
+                        current_med += 1
+                        if DQ.is_coded(drug):
+                            current_coded_med += 1
+                            previous_din = current_din
+                        else:
+                            previous_din = None
+    print("Number of current medications for patients with 'AC' status using first current med found"),
+    print(" and duration multiplier only: " + str(current_med))
+    print("Number that are coded: " + str(current_coded_med))
+    percentage = 100.0 * current_coded_med / current_med
+    print("Percentage of current medications that are coded: " + str(percentage))
+
+    print("\n\nTesting DQ-MED-01d:")
+    current_med = 0
+    current_coded_med = 0
+    for demographics_key in all_drugs_dict:
+        if DQ.is_active(all_patients_dict, demographics_key):
+            patients_drug_list = all_drugs_dict[demographics_key]
+            # patient's drugs are assumed grouped by DIN, with most recent prescription first
+            previous_din = None
+            for drug in patients_drug_list:
+                if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=1.0, use_longterm=True,
                                             use_prn=False):
                     current_din = drug[1]
                     if (current_din is None or current_din == '') or (current_din != previous_din):
@@ -286,7 +305,7 @@ try:
     # # +----------+
     # # | count(*) |
     # # +----------+
-    #                     # |     7776 |
+    # # |     7776 |
     #                     # +----------+
     #                     # 1 row in set (0.06 sec)
     #                     #

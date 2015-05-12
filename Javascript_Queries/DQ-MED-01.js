@@ -1,6 +1,6 @@
 /**
  * Created by rrusk on 13/04/15.
- * Modified by rrusk on 2015/05/05.
+ * Modified by rrusk on 2015/05/12.
  */
 // Title: What percentage of current medications is coded?
 // Modified by rrusk on 2015/05/08.
@@ -11,8 +11,8 @@
 
 function map(patient) {
 
-    var durationMultiplier = 1.0;
-    var prnMultiplier = 1.0;
+    var durationMultiplier = 1.2;
+    var prnMultiplier = 2.0;
 
     var drugList = patient.medications();
 
@@ -56,49 +56,33 @@ function map(patient) {
         var drugStart;
         var drugEnd;
         var modDrugEnd;
-        // long_term and prn set based on most recent prescription
-        // TODO: Get PRN at prescription level.
+        var coded = hasCode(drug);
         var long_term = drug.isLongTerm();
         var m = durationMultiplier;
         if (drug.isPRN()) {
             m = prnMultiplier;
         }
-        var coded = hasCode(drug);
         // count all "current" prescriptions
         if (typeof drug.orderInformation() !== 'undefined' &&
             typeof drug.orderInformation().length != 0) {
             for (var j = 0; j < drug.orderInformation().length; j++) {
                 drugStart = drug.orderInformation()[j].orderDateTime();
                 drugEnd = drug.orderInformation()[j].orderExpirationDateTime();
-                // PRN for individual prescriptions is not currently captured from E2E document
                 modDrugEnd = endDateOffset(drugStart, drugEnd, m);
                 drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
                 modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date
                 if (long_term || (modDrugEnd >= end && drugStart <= end)) {
+                    // emit('d at index '+j, 1);
                     // emit('demo2='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
                     emit('denominator_' + refdateStr, 1);
                     if (coded) {
+                        // emit('n at index '+j, 1);
                         emit('numerator_' + refdateStr, 1);
+                        break; // ignore rest of coded prescriptions for specific DIN after finding one.
                     }
                 }
             }
         }
-        /*if (!coded) {
-            drugStart = drug.indicateMedicationStart();
-            var drugStartInt = drugStart.getTime();
-            drugEnd = drug.indicateMedicationStop();
-            var drugEndInt = drugEnd.getTime();
-            modDrugEnd = endDateOffset(drugStartInt, drugEndInt, m);
-            drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
-            modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date
-            if (long_term || (modDrugEnd >= end && drugStart <= end)) {
-                // emit('demo2='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
-                emit('denominator_' + refdateStr, 1);
-                if (coded) {
-                    emit('numerator_' + refdateStr, 1);
-                }
-            }
-        }*/
     }
 
     function hasCode(drug) {

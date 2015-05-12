@@ -1,9 +1,9 @@
 /**
  * Created by rrusk on 11/05/15.
  */
-// Title: What percentage of current medications is coded? (ignoring PRN and long term flag but using duration multiplier)
+// Title: What percentage of current medications is coded? (using duration multiplier and long term, not PRN)
 // Modified by rrusk on 11/05/15.
-// Description: DQ-MED-01c
+// Description: DQ-MED-01d
 // Note 1: The PRN flag is not currently captured for individual prescription events.
 
 function map(patient) {
@@ -53,6 +53,7 @@ function map(patient) {
         var drugEnd;
         var modDrugEnd;
         var coded = hasCode(drug);
+        var long_term = drug.isLongTerm();
         // count all "current" prescriptions
         if (typeof drug.orderInformation() !== 'undefined' &&
             typeof drug.orderInformation().length != 0) {
@@ -62,13 +63,14 @@ function map(patient) {
                 modDrugEnd = endDateOffset(drugStart, drugEnd, durationMultiplier);
                 drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
                 modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date
-                if (modDrugEnd >= end && drugStart <= end) {
+                if (long_term || (modDrugEnd >= end && drugStart <= end)) {
                     // emit('d at index '+j, 1);
                     // emit('demo2='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
                     emit('denominator_' + refdateStr, 1);
                     if (coded) {
                         // emit('n at index '+j, 1);
                         emit('numerator_' + refdateStr, 1);
+                        break; // ignore rest of coded prescriptions for specific DIN after finding one.
                     }
                 }
             }
