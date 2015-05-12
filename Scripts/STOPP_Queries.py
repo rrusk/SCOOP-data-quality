@@ -114,8 +114,9 @@ try:
             cnt_ac_with_encounter += 1
     print("Number of active patients: " + str(cnt_ac))
     print("Number of active patients with encounter in past 24 months: " + str(cnt_ac_with_encounter))
-    percentage = 100.0 * cnt_ac_with_encounter / cnt_ac
-    print("Percentage of active patients with encounter in past 24 months: " + str(percentage))
+    if cnt_ac > 0:
+        percentage = 100.0 * cnt_ac_with_encounter / cnt_ac
+        print("Percentage of active patients with encounter in past 24 months: " + str(percentage))
 
     print("\n\nTesting DQ-DEM-02:")
     calc_active_patients_dict = DQ.calculated_active_patients(end, all_patients_dict, all_encounters_dict,
@@ -128,8 +129,9 @@ try:
             num += 1
     print("Number of calculated active patients: " + str(den))
     print("Number with neither M nor F gender: " + str(num))
-    percentage = 100.0 * num / den
-    print("Percentage of calculated active patients neither F nor M: " + str(percentage))
+    if den > 0:
+        percentage = 100.0 * num / den
+        print("Percentage of calculated active patients neither F nor M: " + str(percentage))
 
     print("\n\nTesting DQ-DEM-03:")
     num = 0
@@ -142,8 +144,9 @@ try:
                 num += 1
     print("Number of calculated active patients: " + str(den))
     print("Number with invalid date of birth: " + str(num))
-    percentage = 100.0 * num / den
-    print("Percentage of calculated active patients with invalid date of birth: " + str(percentage))
+    if den > 0:
+        percentage = 100.0 * num / den
+        print("Percentage of calculated active patients with invalid date of birth: " + str(percentage))
 
     print("\n\nTesting DQ-DEM-04:")
     num = 0
@@ -153,8 +156,9 @@ try:
             num += 1
     print("Number of calculated active patients: " + str(den))
     print("Number with undocumented date of birth: " + str(num))
-    percentage = 100.0 * num / den
-    print("Percentage of calculated active patients with undocumented date of birth: " + str(percentage))
+    if den > 0:
+        percentage = 100.0 * num / den
+        print("Percentage of calculated active patients with undocumented date of birth: " + str(percentage))
 
     print("\n\nTesting DQ-MED-01:")
     current_med = 0
@@ -177,8 +181,9 @@ try:
                             previous_din = None
     print("Number of current medications to patients with 'AC' status: " + str(current_med))
     print("Number that are coded: " + str(current_coded_med))
-    percentage = 100.0 * current_coded_med / current_med
-    print("Percentage of current medications that are coded: " + str(percentage))
+    if current_med > 0:
+        percentage = 100.0 * current_coded_med / current_med
+        print("Percentage of current medications that are coded: " + str(percentage))
 
     print("\n\nTesting DQ-MED-01b:")
     current_med = 0
@@ -196,8 +201,9 @@ try:
     print(
         "Number of current medications to patients with 'AC' status (no long-term or multipliers): " + str(current_med))
     print("Number that are coded: " + str(current_coded_med))
-    percentage = 100.0 * current_coded_med / current_med
-    print("Percentage of current medications that are coded: " + str(percentage))
+    if current_coded_med > 0:
+        percentage = 100.0 * current_coded_med / current_med
+        print("Percentage of current medications that are coded: " + str(percentage))
 
     print("\n\nTesting DQ-MED-01c:")
     current_med = 0
@@ -221,8 +227,9 @@ try:
     print("Number of current medications for patients with 'AC' status using first current med found"),
     print(" and duration multiplier only: " + str(current_med))
     print("Number that are coded: " + str(current_coded_med))
-    percentage = 100.0 * current_coded_med / current_med
-    print("Percentage of current medications that are coded: " + str(percentage))
+    if current_med > 0:
+        percentage = 100.0 * current_coded_med / current_med
+        print("Percentage of current medications that are coded: " + str(percentage))
 
     print("\n\nTesting DQ-MED-01d:")
     current_med = 0
@@ -246,8 +253,9 @@ try:
     print("Number of current medications for patients with 'AC' status using first current med found"),
     print(" and duration multiplier only: " + str(current_med))
     print("Number that are coded: " + str(current_coded_med))
-    percentage = 100.0 * current_coded_med / current_med
-    print("Percentage of current medications that are coded: " + str(percentage))
+    if current_med > 0:
+        percentage = 100.0 * current_coded_med / current_med
+        print("Percentage of current medications that are coded: " + str(percentage))
 
     print("\n\nTesting DQ-MED-02:")
     cnt_prescriptions = 0
@@ -271,8 +279,9 @@ try:
                 cnt_encounters += 1
     print("Number of prescriptions recorded in past 12 months: " + str(cnt_prescriptions))
     print("Number of encounters recorded in past 12 months: " + str(cnt_encounters))
-    ratio = 1.0 * cnt_prescriptions / cnt_encounters
-    print("Ratio of prescriptions to encounters: " + str(ratio))
+    if cnt_encounters > 0:
+        ratio = 1.0 * cnt_prescriptions / cnt_encounters
+        print("Ratio of prescriptions to encounters: " + str(ratio))
 
     # print("\n\nTesting DQ-MED-01 v2:")
     # current_med = 0
@@ -348,8 +357,9 @@ try:
             cnt_active_no_med += 1
     print("Number of calculated active patients: " + str(cnt_active_patients))
     print("Number of calculated active patients with no current medications documented: " + str(cnt_active_no_med))
-    percentage = 100.0 * cnt_active_no_med / cnt_active_patients
-    print("Percentage of active patients with no current medications: " + str(percentage))
+    if cnt_active_patients > 0:
+        percentage = 100.0 * cnt_active_no_med / cnt_active_patients
+        print("Percentage of active patients with no current medications: " + str(percentage))
 
     print("\n\nTesting DQ-PL-01: What percentage of problems on the problem list, documented in the past 12 months,"),
     print(" has a diagnostic code?")
@@ -368,8 +378,9 @@ try:
                 print "DEBUG: demographic_no =", demographic_key, 'prob = ', str(prob)
     print("Number of problems in last 12 months: " + str(cnt_problems))
     print("Number of coded problems in last 12 months: " + str(cnt_prob_codes))
-    percentage = 100.0 * cnt_problems / cnt_prob_codes
-    print("Percentage of problems that were coded in past 12 months: " + str(percentage))
+    if cnt_prob_codes > 0:
+        percentage = 100.0 * cnt_problems / cnt_prob_codes
+        print("Percentage of problems that were coded in past 12 months: " + str(percentage))
 
     print("\n\nTesting DQ-PL-02: What percentage of patients, 12 AND OVER, calculated as active, has at least one"),
     print(" documented problem on the problem list (documented in the past 12 months)?")
@@ -391,8 +402,9 @@ try:
                         print "DEBUG: demographic_no =", demographic_key, 'prob = ', str(prob)
     print("Number of calculated active patients 12 and over: " + str(cnt_active_12plus))
     print("Number of with at least one problem documented in in last 12 months: " + str(cnt_with_problem))
-    percentage = 100.0 * cnt_with_problem / cnt_active_12plus
-    print("Percentage of problems that were coded in past 12 months: " + str(percentage))
+    if cnt_active_12plus > 0:
+        percentage = 100.0 * cnt_with_problem / cnt_active_12plus
+        print("Percentage of problems that were coded in past 12 months: " + str(percentage))
 
     print("\n\nTesting DQ-PL-03: What percentage of patients, calculated as active, 12 and over, has Diabetes on the"),
     print(" problem list?")
@@ -408,8 +420,9 @@ try:
                 cnt_with_diabetes += 1
     print("Number of calculated active patients 12 and over: " + str(cnt_active_12plus))
     print("Number of with diabetes on problem list: " + str(cnt_with_diabetes))
-    percentage = 100.0 * cnt_with_problem / cnt_active_12plus
-    print("Percentage of calc active patients over 12 with diabetes: " + str(percentage))
+    if cnt_active_12plus > 0:
+        percentage = 100.0 * cnt_with_problem / cnt_active_12plus
+        print("Percentage of calc active patients over 12 with diabetes: " + str(percentage))
 
     print("\n\nTesting DQ-PL-04: Of patients with a current Tiotropium medication, what percentage has COPD"),
     print(" on the problem list?")
@@ -427,8 +440,9 @@ try:
                     cnt_has_prob += 1
     print("Number of patients with current Tiotropium med: " + str(cnt_has_med))
     print("Number with both current Tiotropium and COPD: " + str(cnt_has_prob))
-    percentage = 100.0 * cnt_has_prob / cnt_has_med
-    print("Percentage with COPD on Tiotropium: " + str(percentage))
+    if cnt_has_med > 0:
+        percentage = 100.0 * cnt_has_prob / cnt_has_med
+        print("Percentage with COPD on Tiotropium: " + str(percentage))
 
     print("\n\nTesting DQ-PL-05: Of patients with a current Levothyroxine medication, what percentage has"),
     print(" Hypothyroidism on the problem list?")
@@ -445,8 +459,9 @@ try:
                     cnt_has_prob += 1
     print("Number of patients with current Levothyroxine med: " + str(cnt_has_med))
     print("Number with both current Levothyroxine and hypothyroidism: " + str(cnt_has_prob))
-    percentage = 100.0 * cnt_has_prob / cnt_has_med
-    print("Percentage with hypothyroidism on levothyroxine: " + str(percentage))
+    if cnt_has_med > 0:
+        percentage = 100.0 * cnt_has_prob / cnt_has_med
+        print("Percentage with hypothyroidism on levothyroxine: " + str(percentage))
 
     print("\n\nTesting DQ-PL-06: Of patients with a current anti-gout medication, what percentage has Gout"),
     print(" on the problem list?")
@@ -463,8 +478,9 @@ try:
                     cnt_has_prob += 1
     print("Number of patients with current allopurinol med: " + str(cnt_has_med))
     print("Number with both current allopurinol and gout: " + str(cnt_has_prob))
-    percentage = 100.0 * cnt_has_prob / cnt_has_med
-    print("Percentage with gout on allopurinol: " + str(percentage))
+    if cnt_has_med > 0:
+        percentage = 100.0 * cnt_has_prob / cnt_has_med
+        print("Percentage with gout on allopurinol: " + str(percentage))
 
     print("\n\nTesting STOPP Rule A02:")
     any_drugs = ["C03C"]

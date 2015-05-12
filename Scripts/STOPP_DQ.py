@@ -242,8 +242,12 @@ def had_rx_encounter(med_list, estart, eend):
     if med_list is None:
         return False
     for prescription_encounter in med_list:
-        if estart <= prescription_encounter[2] <= eend:
-            return True
+        try:
+            if estart <= prescription_encounter[2] <= eend:
+                return True
+        except TypeError:
+            print("DEBUG: prescription encounter with " + str(prescription_encounter))
+            return False
     return False
 
 
