@@ -46,8 +46,8 @@ def create_dict_by_demographic_no(mlist):
 # def create_med_dict(mlist):
 # mdict = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
 # for mlist_row in mlist:
-#         mdict[mlist_row[0]][mlist_row[2]] = [mlist_row[1:]]
-#     return mdict
+# mdict[mlist_row[0]][mlist_row[2]] = [mlist_row[1:]]
+# return mdict
 #
 
 # creates a demographics dictionary with demographic_no as key and
@@ -65,7 +65,7 @@ def get_demographics(cursor):
 def get_drugs(cursor, archived=False):
     query = """select d.demographic_no, d.ATC, d.regional_identifier as DIN, d.rx_date, d.end_date, d.long_term,
                d.lastUpdateDate, d.prn, d.provider_no, d.BN, d.GN from drugs d where d.archived=%s
-               order by d.demographic_no asc, DIN asc, d.BN asc, d.GN asc, d.rx_date desc"""
+               order by d.demographic_no asc, DIN asc, d.rx_date desc, d.BN asc, d.GN asc"""
     cursor.execute(query, archived)
     result = cursor.fetchall()
     return create_dict_by_demographic_no(result)
@@ -315,7 +315,7 @@ def is_coded(med):
 
 # Checks whether the medication is long-term or hasn't reached its end date
 # Applies a duration multiplier.
-def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier=1.0, set_longterm=None, set_prn=None):
+def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier=1.0, use_longterm=True, use_prn=True):
     # print("ref_date: " + str(ref_date))
     # print("med[2]: " + str(med[2]))
     #
@@ -329,7 +329,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
     med_start = med[2]
     med_end = med[3]
     multiplier = duration_multiplier
-    if set_prn or is_prn(med):
+    if use_prn and is_prn(med):
         multiplier = prn_multiplier
     try:
         tdelta = med_end - med_start
@@ -338,7 +338,7 @@ def is_current_medication(med, ref_date, duration_multiplier=1.0, prn_multiplier
         return False
     med_end_mod = med_start + datetime.timedelta(seconds=multiplier * tdelta.total_seconds())
     # if long-term or between med start and end dates return true
-    if (set_longterm or is_long_term(med)) or (ref_date <= med_end_mod):
+    if (use_longterm and is_long_term(med)) or (ref_date <= med_end_mod):
         return True
     return False
 
@@ -407,7 +407,7 @@ def print_stats(problem_dict, drug_dict, encounter_dict, numerator_dict):
     for key in ordered_dict:
         default = None
         encounter_list = encounter_dict.get(key, default)
-        drug_list = drug_dict.get(key, default)
+        med_list = drug_dict.get(key, default)
         print("key: " + str(key)),
         if problem_dict is None:
             print("\t  problems: NA"),
@@ -415,7 +415,7 @@ def print_stats(problem_dict, drug_dict, encounter_dict, numerator_dict):
             print("\t  problems: 0"),
         else:
             print("\t  problems: " + str(len(problem_dict.get(key, default)))),
-        print("\t  drugs: " + str(len(drug_list))),
+        print("\t  drugs: " + str(len(med_list))),
         if encounter_list is None:
             print("\t  encounter: 0")
         else:
@@ -739,6 +739,35 @@ if __name__ == '__main__':
         number = get_query_results(cur, test_query)[0][0]
         if cnt_coded != number:
             err_cnt = error_message("is_coded", number, cnt_coded, err_cnt)
+
+        # test whether drugs are sorted by DIN, rx_date
+        cnt_out_of_order = 0
+        cnt_missing_rx_date = 0
+        previous_din = None
+        current_din = None
+        previous_rx = None
+        current_rx = None
+        previous_drug = None
+        for demo_key in all_drugs_dict:
+            the_drug_list = all_drugs_dict[demo_key]
+            for drug in the_drug_list:
+                current_din = drug[1]
+                current_rx = drug[2]
+                if current_rx == None:
+                    cnt_missing_rx_date +=1
+                    previous_rx = None
+                elif current_din != None and current_din != '' and current_din == previous_din:
+                    if previous_rx is not None and current_rx > previous_rx:
+                        cnt_out_of_order += 1
+                        print("DEBUG: demo_no = " + str(demo_key) + "\t prev_drug = " + str(previous_drug))
+                        print("DEBUG: demo_no = " + str(demo_key) + "\t curr_drug = " + str(drug))
+                    previous_rx = current_rx
+                else:
+                    previous_rx = None
+                    previous_din = current_din
+                previous_drug = drug
+        print("WARN: drugs out of order count " + str(cnt_out_of_order))
+        print("WARN: number with missing rx_date " + str(cnt_missing_rx_date))
 
         # test get_dxresearch
         dx_dict = get_dxresearch(cur)

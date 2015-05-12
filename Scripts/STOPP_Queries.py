@@ -65,7 +65,7 @@ try:
     print "        too old: ", cnt_too_old_patients
     print "    'ac' status: ", cnt_ac_patients
 
-    # patient 65+ as of 4 month before reference date
+    # patient 65+ as of 4 month before reference date (elderly defaults to only active patients)
     elderly_patients_dict = DQ.elderly(all_patients_dict, start_4mo_ago)
 
     default = None
@@ -161,27 +161,26 @@ try:
     current_coded_med = 0
     for demographics_key in all_drugs_dict:
         if DQ.is_active(all_patients_dict, demographics_key):
-            current_din = None
-            previous_din = None
-            long_term = None
-            prn = None
             patients_drug_list = all_drugs_dict[demographics_key]
             # patient's drugs are assumed grouped by DIN, with most recent prescription first
             for drug in patients_drug_list:
-                current_din = drug[1]
-                if not DQ.is_coded(drug):
-                    long_term = None
-                    prn = None
-                elif current_din != previous_din:
-                    # use long_term and prn settings of most recent prescription grouped by DIN
+                previous_din = None
+                if drug[1] == '' or drug[1] is None:
+                    current_din = 'null'
+                else:
+                    current_din = drug[1]
+                if (current_din == 'null') or (current_din != previous_din):
+                    previous_din = current_din
+                    # uses long_term and prn settings of most recent prescription grouped by DIN
                     long_term = DQ.is_long_term(drug)
                     prn = DQ.is_prn(drug)
-                    previous_din = current_din
-                if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0,
-                                            set_longterm=long_term, set_prn=prn):
-                    current_med += 1
-                    if DQ.is_coded(drug):
-                        current_coded_med += 1
+                    if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0,
+                                                use_longterm=True, use_prn=False):
+                        current_med += 1
+                        if DQ.is_coded(drug):
+                            current_coded_med += 1
+                        continue  # found one so go to next drug
+
     print("Number of current medications to patients with 'AC' status: " + str(current_med))
     print("Number that are coded: " + str(current_coded_med))
     percentage = 100.0 * current_coded_med / current_med
@@ -195,11 +194,38 @@ try:
             patients_drug_list = all_drugs_dict[demographics_key]
             # patient's drugs are assumed grouped by DIN, with most recent prescription first
             for drug in patients_drug_list:
-                if DQ.is_current_medication(drug, end, duration_multiplier=1.0, prn_multiplier=1.0):
+                if DQ.is_current_medication(drug, end, duration_multiplier=1.0, prn_multiplier=1.0, use_longterm=False,
+                                            use_prn=False):
                     current_med += 1
                     if DQ.is_coded(drug):
                         current_coded_med += 1
-    print("Number of current medications to patients with 'AC' status: " + str(current_med))
+    print(
+        "Number of current medications to patients with 'AC' status (no long-term or multipliers): " + str(current_med))
+    print("Number that are coded: " + str(current_coded_med))
+    percentage = 100.0 * current_coded_med / current_med
+    print("Percentage of current medications that are coded: " + str(percentage))
+
+    print("\n\nTesting DQ-MED-01c:")
+    current_med = 0
+    current_coded_med = 0
+    for demographics_key in all_drugs_dict:
+        if DQ.is_active(all_patients_dict, demographics_key):
+            patients_drug_list = all_drugs_dict[demographics_key]
+            # patient's drugs are assumed grouped by DIN, with most recent prescription first
+            previous_din = None
+            for drug in patients_drug_list:
+                if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=1.0, use_longterm=False,
+                                            use_prn=False):
+                    current_din = drug[1]
+                    if (current_din is None or current_din == '') or (current_din != previous_din):
+                        current_med += 1
+                        if DQ.is_coded(drug):
+                            current_coded_med += 1
+                            previous_din = current_din
+                        else:
+                            previous_din = None
+    print("Number of current medications for patients with 'AC' status using first current med found"),
+    print(" and duration multiplier only: " + str(current_med))
     print("Number that are coded: " + str(current_coded_med))
     percentage = 100.0 * current_coded_med / current_med
     print("Percentage of current medications that are coded: " + str(percentage))
@@ -249,17 +275,17 @@ try:
     # print("DEBUG: current_din: " + str(current_din))
     # if True:  # previous_din != current_din:
     # if DQ.is_current_medication(drug, end, duration_multiplier=1.2, prn_multiplier=2.0):
-    #                     current_med += 1
-    #                     if current_din != "null":
-    #                         coded_med += 1
+    # current_med += 1
+    # if current_din != "null":
+    # coded_med += 1
     #
-    #                     # mysql> select count(*) from
-    #  (select dr.demographic_no, regional_identifier, BN, GN, customName, ATC, dr.end_date from drugs dr join
-    #  demographic de on dr.demographic_no = de.demographic_no where de.patient_status='AC' and dr.archived=0 and
-    #  (dr.long_term=1 or dr.end_date>NOW()) and LENGTH(dr.regional_identifier)=8) x;
-    #                     # +----------+
-    #                     # | count(*) |
-    #                     # +----------+
+    # # mysql> select count(*) from
+    # (select dr.demographic_no, regional_identifier, BN, GN, customName, ATC, dr.end_date from drugs dr join
+    # demographic de on dr.demographic_no = de.demographic_no where de.patient_status='AC' and dr.archived=0 and
+    # (dr.long_term=1 or dr.end_date>NOW()) and LENGTH(dr.regional_identifier)=8) x;
+    # # +----------+
+    # # | count(*) |
+    # # +----------+
     #                     # |     7776 |
     #                     # +----------+
     #                     # 1 row in set (0.06 sec)
