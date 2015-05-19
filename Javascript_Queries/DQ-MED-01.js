@@ -1,6 +1,6 @@
 /**
  * Created by rrusk on 13/04/15.
- * Modified by rrusk on 2015/05/12.
+ * Modified by rrusk on 2015/05/19.
  */
 // Title: What percentage of current medications is coded?
 // Modified by rrusk on 2015/05/08.
@@ -58,16 +58,20 @@ function map(patient) {
         var modDrugEnd;
         var coded = hasCode(drug);
         var long_term = drug.isLongTerm();
-        var m = durationMultiplier;
-        if (drug.isPRN()) {
-            m = prnMultiplier;
-        }
+        var m; // = durationMultiplier;
+        //if (drug.isPRN()) {
+        //    m = prnMultiplier;
+        //}
         // count all "current" prescriptions
         if (typeof drug.orderInformation() !== 'undefined' &&
             typeof drug.orderInformation().length != 0) {
             for (var j = 0; j < drug.orderInformation().length; j++) {
                 drugStart = drug.orderInformation()[j].orderDateTime();
                 drugEnd = drug.orderInformation()[j].orderExpirationDateTime();
+                m = durationMultiplier;
+                if (drug.orderInformation()[j].isPRN()) {
+                    m = prnMultiplier;
+                }
                 modDrugEnd = endDateOffset(drugStart, drugEnd, m);
                 drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
                 modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date

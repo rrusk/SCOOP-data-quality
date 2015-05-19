@@ -85,28 +85,32 @@ function map(patient) {
     }
 
     function isDrugInWindow(drug) {
-        var drugStart = drug.indicateMedicationStart();
-        var drugStartInt = drugStart.getTime();
-        var drugEnd = drug.indicateMedicationStop();
-        var drugEndInt = drugEnd.getTime();
-        var m = durationMultiplier;
-        if (drug.isPRN()) {  // PRN only captured at medication level at present
-            m = prnMultiplier;
-        }
-        var modDrugEnd = endDateOffset(drugStartInt, drugEndInt, m);
-        drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
-        modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date
-        if (modDrugEnd >= end && drugStart <= end) {
+        var drugStart; // = drug.indicateMedicationStart();
+        //var drugStartInt = drugStart.getTime();
+        var drugEnd; // = drug.indicateMedicationStop();
+        //var drugEndInt = drugEnd.getTime();
+        var m; // = durationMultiplier;
+        //if (drug.isPRN()) {
+        //    m = prnMultiplier;
+        //}
+        var modDrugEnd;
+        //var modDrugEnd = endDateOffset(drugStartInt, drugEndInt, m);
+        //drugStart.setHours(24, 1);   // kludge to get prescription start date to align with database date
+        //modDrugEnd.setHours(47, 59); // kludge to get prescription end date to align with database date
+        //if (modDrugEnd >= end && drugStart <= end) {
             // emit('demo1='+patient['json']['emr_demographics_primary_key']+'; modDrugEnd='+modDrugEnd+'; end='+end+'; drugStart='+drugStart,1);
-            return true;
-        } else {
+        //    return true;
+        //} else {
             // need to also search older prescriptions
             if (typeof drug.orderInformation() !== 'undefined' &&
                 typeof drug.orderInformation().length != 0) {
                 for (var j = 0; j < drug.orderInformation().length; j++) {
                     drugStart = drug.orderInformation()[j].orderDateTime();
                     drugEnd = drug.orderInformation()[j].orderExpirationDateTime();
-                    // PRN for individual prescriptions is not currently captured from E2E document
+                    m = durationMultiplier;
+                    if (drug.orderInformation()[j].isPRN()) {
+                        m = prnMultiplier;
+                    }
                     modDrugEnd = endDateOffset(drugStart, drugEnd, m);
                     drugStart.setHours(24, 1);
                     modDrugEnd.setHours(47, 59);
@@ -116,7 +120,7 @@ function map(patient) {
                     }
                 }
             }
-        }
+        //}
         return false;
     }
 

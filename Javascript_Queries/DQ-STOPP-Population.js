@@ -1,25 +1,29 @@
 /**
- * Created by rrusk on 09/03/15.
+ * Created by rrusk on 15/07/14.
  */
-// Title: Elderly Patients with active status
-// Description: Potential STOPP Population
-// Obtain estimate of number of STOPP patients (>= 65y as of 4 months ago at beginning of study window)
-// Compare to:
-// mysql> SELECT COUNT(d.demographic_no) AS Count FROM demographic AS d
-//   WHERE d.patient_status = 'AC' AND
-//   CONCAT_WS( '-',d.year_of_birth,d.month_of_birth,d.date_of_birth ) <=
-//   DATE_SUB( DATE_SUB(NOW(), INTERVAL 4 MONTH), INTERVAL 65 YEAR);
+// Title: Elderly Patients Seen by Study Practitioners in 4 month window
+// Description: STOPP Rule Population v2
+// Obtain estimate of how many STOPP patients might be seen by provider within 4 month window
 
 function map(patient) {
 
-    var ageElderly = 65;
-    var ageMax = 150;
+    var ignore_providers_list = true;
+    var providers = setStoppDQProviders();
+    if (providers) {
+        ignore_providers_list = false;
+    }
 
-    // Months are counted from 0 in Javascript so August is 7, for instance.
-    var now = new Date();  // no parameters or yyyy,mm,dd if specified
-    var start = addDate(now, 0, -4, -1); // four month study window; generally most
-    //var end = addDate(now, 0, 0, -1);    // recent records are from previous day
-    var currentRec = currentRecord(now);
+    var v1_age = 65;
+
+    var drugList = patient.medications();
+    var encounterList = patient.encounters();
+
+    var refdateStr = setStoppDQRefDateStr();   // hQuery library function call
+    var refdate = new Date(refdateStr);      // refdateStr is 'yyyy,mm,dd' with mm from 1-12
+    refdate.setHours(23, 59);                 // set to end of refdate then subtract one day
+    var start = addDate(refdate, 0, -4, -1); // four month study window; generally most
+    var end = addDate(refdate, 0, 0, -1);    // recent records are from previous day
+    var currentRec = currentRecord(end);
 
     // Shifts date by year, month, and date specified
     function addDate(date, y, m, d) {
@@ -30,25 +34,66 @@ function map(patient) {
         return n;
     }
 
-    // Test that record is current (as of day before date at 0:00AM)
+    // Test that record is current (as of day before study reference date at 0:00AM)
     function currentRecord(date) {
         var daybefore = new Date(date);
-        daybefore.setDate(daybefore.getDate() - 1);
-        daybefore.setHours(0,0);
+        daybefore.setHours(0, 0);
         return patient['json']['effective_time'] > daybefore / 1000;
     }
 
     // Checks if patient is older than ageLimit at start of window
-    function targetPopulation(ageLimit, ageUpper) {
-        if (ageUpper === undefined) {
-            ageUpper = ageMax;
-        }
-        return (patient.age(start) >= ageLimit) &&  (patient.age(start) <= ageUpper);
+    // The upper limit filters out patients with unknown age
+    function targetPopulation(ageLimit) {
+        return patient.age(start) >= ageLimit && patient.age(start) <= 150;
     }
 
-    emit('denominator', 1);
-    emit('numerator', 0);
-    if (currentRec && targetPopulation(ageElderly)) {
-        emit('numerator', 1);
+    // Checks for encounter with any of the specified providers between start and end dates
+    function hadEncounter(startDate, endDate) {
+        for (var i = 0; i < encounterList.length; i++) {
+            if (encounterList[i].startDate() >= startDate &&
+                encounterList[i].startDate() <= endDate) {
+                if (ignore_providers_list ||
+                    (typeof encounterList[i].performer() !== 'undefined' &&
+                    typeof encounterList[i].performer()['json'] !== 'undefined' &&
+                    providers.indexOf(encounterList[i].performer()['json']['family_name']) > -1)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Checks for encounter with any of the specified providers between start and end dates
+    function hadRxEncounter(startDate, endDate) {
+        for (var i = 0; i < drugList.length; i++) {
+            if (typeof drugList[i].orderInformation() !== 'undefined' &&
+                typeof drugList[i].orderInformation().length != 0) {
+                for (var j = 0; j < drugList[i].orderInformation().length; j++) {
+                    var drugPrescribed = drugList[i].orderInformation()[j].orderDateTime();
+                    drugPrescribed.setHours(24, 1);  // kludge to get start date to match rx_date in EMR
+                    if (drugPrescribed >= startDate && drugPrescribed <= endDate) {
+                        if (ignore_providers_list ||
+                            (typeof providers !== 'undefined' &&
+                            providers.length != 0 &&
+                            typeof drugList[i].orderInformation()[j]['json'] !== 'undefined' &&
+                            typeof drugList[i].orderInformation()[j]['json']['performer'] !== 'undefined' &&
+                            providers.indexOf(drugList[i].orderInformation()[j]['json']['performer']['family_name']) > -1)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    refdateStr = refdateStr.replace(/,/g, '');
+    emit('denominator_' + refdateStr, 0);
+    emit('numerator_' + refdateStr, 0);
+    if (currentRec && targetPopulation(v1_age)) {
+        emit('denominator_' + refdateStr, 1);
+        if (hadEncounter(start, end) || hadRxEncounter(start, end)) {
+            emit('numerator_' + refdateStr, 1);
+        }
     }
 }
