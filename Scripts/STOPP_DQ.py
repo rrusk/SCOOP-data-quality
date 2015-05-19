@@ -451,9 +451,8 @@ def d_anyproblem_n_anydrug_notanydrug(patient_dict, problem_dict, drug_dict, enc
                 provider_list,
                 study_start, study_end):
             denominator_dict[key] = row
-            if drug_list is not None and has_current_target_medication(drug_list, anydrug_list,
-                                                                       study_end) and not has_current_target_medication(
-                    drug_list, notanydrug_list, study_end):
+            if drug_list is not None and has_current_target_medication(drug_list, anydrug_list, study_end) \
+                    and not has_current_target_medication(drug_list, notanydrug_list, study_end):
                 numerator_dict[key] = row
     print("Number of elderly with condition(s) " + str(anyproblem_list) + " seen by study provider in last 4 months: "
           + str(len(denominator_dict)))
@@ -468,9 +467,10 @@ def d_n_anydrug(patient_dict, drug_dict, encounter_dict, anydrug_list, provider_
     print("Number of elderly patients: " + str(len(patient_dict)))
     denominator_dict = {}
     numerator_dict = {}
+    default = None
     for key in patient_dict:
         row = patient_dict[key]
-        default = None
+        # default = None
         encounter_list = encounter_dict.get(key, default)
         drug_list = drug_dict.get(key, default)
         if had_provider_encounter(encounter_list, provider_list, study_start, study_end) or had_rx_provider_encounter(
@@ -483,7 +483,7 @@ def d_n_anydrug(patient_dict, drug_dict, encounter_dict, anydrug_list, provider_
     print("Number of elderly patients seen by study provider in last 4 months: " + str(len(denominator_dict)))
     print("Number of elderly patients on " + str(anydrug_list) +
           " seen by study provider in last 4 months: " + str(len(numerator_dict)))
-    print_stats(None, drug_dict, encounter_dict, numerator_dict)
+    print_stats(default, drug_dict, encounter_dict, numerator_dict)
 
 
 # Denominator includes elderly patients with any drug from anydrug_list.
@@ -538,11 +538,9 @@ def d_anydrug_n_notanydrug(patient_dict, problem_dict, drug_dict, encounter_dict
         default = None
         encounter_list = encounter_dict.get(key, default)
         drug_list = drug_dict.get(key, default)
-        if has_current_target_medication(drug_list, anydrug_list, study_end) and (had_provider_encounter(
-                encounter_list, provider_list, study_start, study_end) or had_rx_provider_encounter(
-                drug_list,
-                provider_list,
-                study_start, study_end)):
+        if has_current_target_medication(drug_list, anydrug_list, study_end) and \
+                (had_provider_encounter(encounter_list, provider_list, study_start, study_end) or
+                 had_rx_provider_encounter(drug_list, provider_list, study_start, study_end)):
             denominator_dict[key] = row
             print("DEBUG den:", str(row))
             if not has_current_target_medication(drug_list, notanydrug_list, study_end):
@@ -757,10 +755,10 @@ if __name__ == '__main__':
             for drug in the_drug_list:
                 current_din = drug[1]
                 current_rx = drug[2]
-                if current_rx == None:
-                    cnt_missing_rx_date +=1
+                if current_rx is None:
+                    cnt_missing_rx_date += 1
                     previous_rx = None
-                elif current_din != None and current_din != '' and current_din == previous_din:
+                elif current_din is not None and current_din != '' and current_din == previous_din:
                     if previous_rx is not None and current_rx > previous_rx:
                         cnt_out_of_order += 1
                         print("DEBUG: demo_no = " + str(demo_key) + "\t prev_drug = " + str(previous_drug))
