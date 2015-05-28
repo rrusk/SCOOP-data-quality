@@ -18,6 +18,7 @@ function setStoppDQProviders() {
         'B63m7xoU83mwtz2RIl1aN0HE3PPAOsdDiGNhPw==',
         'kxDpGMv+o1ZFJEXV/9LUTW1tA7uVv3c/fhT13Q==',
         'R12lDOzkIzzsRIBEdO1JDze9Ud/HauUvRRCl9Q==',
+        'VykBfkRxJvrOr6NrAI8cbs9sSYRchfPeWnNtZA==',
         'kKWDni0CYlV1ugXRoqyPC9pSh8yUGkAMmmxBTQ==',
         'aDNVDMdceJfpcheqbCMaQxIeQ8iFkbQYxhdMFA==',
         'qjfwYUf9XoHjPNjai1h+lF38+kld4jQSaE+U9A==',
