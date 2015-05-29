@@ -4,6 +4,10 @@
 # ~/mysql/db_config.  Change if needed.  Variables are initialized
 # this way for compatibility with prior Bash script.
 #
+# Determination of 3rd next appointment similar that used in Oscar EMR code in
+# src/main/webapp/appointment/appointmentsearch.jsp and
+# src/main/java/org/oscarehr/appointment/web/NextAppointmentSearchHelper.java
+#
 import sys
 
 __author__ = 'rrusk'
@@ -22,22 +26,104 @@ from dateutil.relativedelta import relativedelta
 
 con = None
 f = None
+max_days_to_search = 180
 
 
-# create dictionary on second item in tuple
-def create_dict_2nd(tlist):
+# create dictionary on first item in tuple
+def create_dict(tlist):
     tdict = {}
     for trow in tlist:
-        tdict[trow[1]] = trow[2:]
+        tdict[trow[0]] = trow[1:]
     return tdict
 
 
-# creates list of providers with values [provider_no, first_name, last_name]
-def get_providers(cursor):
-    query = """SELECT p.provider_no, p.first_name, p.last_name from provider p order by p.last_name"""
+# create dict of active providers with key provider_no and value [first_name, last_name].
+def get_active_providers_dict(cursor):
+    query = """SELECT p.provider_no, p.first_name, p.last_name from provider p where status='1' order by p.last_name"""
     cursor.execute(query)
     result = cursor.fetchall()
+    return create_dict(result)
+
+
+# get dict of scheduletemplatecodes with code as key and [duration, description] as value
+def get_schedule_template_code_dict(cursor):
+    query = """select code, duration, description from scheduletemplatecode order by code"""
+    cursor.execute(query)
+    result = cursor.fetchall()
+    return create_dict(result)
+
+
+# get dictionary of schedule templates with name as key and [provider_no, summary, timecode] as value
+def get_schedule_template_dict(cursor):
+    query = """select name, provider_no, summary, timecode from scheduletemplate"""
+    cursor.execute(query)
+    result = cursor.fetchall()
+    s_dict = {}
+    for s_item in result:
+        if s_item[0] == '':
+            s_dict['empty'] = s_item[1:]
+        elif s_item[0] is None:
+            s_dict['null'] = s_item[1:]
+        else:
+            s_dict[s_item[0]] = s_item[1:]
+    return s_dict
+
+
+# test whether the timecode strings in scheduletemplate are valid
+def validate_timecode_strings(schedule_template_dict, schedule_template_code_dict):
+    result = True
+    defaultv = None
+    cnt_valid = 0
+    cnt_invalid = 0
+    cnt_missing_codes = 0
+    for st_item in schedule_template_dict:
+        timecode_str = schedule_template_dict[st_item][2]
+        total_min = 0
+        warning = False
+        for char in timecode_str:
+            if char == '_':
+                total_min += 15
+            else:
+                value = schedule_template_code_dict.get(char, defaultv)
+                if value and value[0] != '':
+                    total_min += int(value[0])
+                else:
+                    total_min += 15  # assume unrecognized or absent codes have duration 15 minutes
+                    warning = True
+        if total_min != 24 * 60:
+            print("INVALID TIMECODE STRING FOR " + str(st_item) + ": Totals " + str(total_min) + " rather then 1440")
+            print(str(timecode_str))
+            cnt_invalid += 1
+            result = False
+        elif warning:
+            print("WARNING: INVALID CODES IN TIMECODE STRING FOR " + str(st_item)),
+            print(": (Assuming missing codes have 15 min durations)")
+            print(str(timecode_str))
+            cnt_missing_codes += 1
+        else:
+            print("VALID TIMECODE STRING FOR " + str(st_item) + ":")
+            print(str(timecode_str))
+            cnt_valid += 1
+    print("Valid: " + str(cnt_valid) + " Invalid: " + str(cnt_invalid)),
+    print(" Valid with missing codes: " + str(cnt_missing_codes))
     return result
+
+
+# get dictionary of schedule template name values indexed by (provider_no, date)
+def get_schedule_dict(cursor):
+    # for reasons unknown some rows are duplicated in the scheduledate table (except for primary key) so the
+    # dictionary can be shorter than complete list of rows
+    query = """
+        select distinct sdate, provider_no, hour, available from scheduledate
+        where status='A' and hour!='' and hour is not NULL
+        order by sdate, provider_no;
+        """
+    cursor.execute(query)
+    result = cursor.fetchall()
+    s_dict = {}
+    for s_item in result:
+        s_dict[(s_item[0], s_item[1])] = s_item[2:]
+    return s_dict
 
 
 # reads csv file containing study providers listed row by row using first_name|last_name
@@ -54,10 +140,10 @@ def get_study_provider_list(csv_file):
 # uses the providers csv file to determine provider_no values for study practitioners
 def get_provider_nums(provider_list, study_provider_list):
     pnums_list = []
-    for p in study_provider_list:
-        for provider in provider_list:
-            if provider[1].strip() == p[0].strip() and provider[2].strip() == p[1].strip():
-                pnums_list.append(provider[0].strip())
+    for s in study_provider_list:
+        for p in provider_list:
+            if provider_list[p][0].strip() == s[0].strip() and provider_list[p][1].strip() == s[1].strip():
+                pnums_list.append(p.strip())
     return pnums_list
 
 
@@ -103,7 +189,8 @@ if __name__ == '__main__':
             return error_cnt + 1
 
         # get provider numbers
-        providers = get_providers(cur)
+        providers = get_active_providers_dict(cur)
+
         provider_nos = get_provider_nums(providers, study_providers)
         print("provider_nums: " + str(provider_nos))
 
@@ -125,45 +212,33 @@ if __name__ == '__main__':
                 print(str(su[0]) + '\t' + str(su[1]) + '\t' + str(su[2]) + '\t\t' + str(su[3]))
 
         # get scheduletemplatecode
-        stc_query = """
-        select * from scheduletemplatecode order by code;
-        """
-        stc = get_query_results(cur, stc_query)
+        stc = get_schedule_template_code_dict(cur)
         print"\nscheduletemplatecode:"
-        print('c description\tduration')
+        print('c duration\tdescription')
         for item in stc:
-            print(str(item[0])+' '+str(item[1])+'\t'+str(item[2]))
+            print(str(item) + ' ' + str(stc[item][0]) + '\t' + str(stc[item][1]))
 
         print("ERRORS: " + str(err_cnt))
 
+        # get schedule template dictionary
+        stdict = get_schedule_template_dict(cur)
+        # for item in stdict:
+        #     print(str(item) + " ->\t" + str(stdict[item][2]))
+
+        validate_timecode_strings(stdict, stc)
+
         # from scheduleDate get name of scheduletemplate
-        st_name_query = """
-        select sdate, provider_no, hour from scheduledate where status='A' and hour!=''
-        order by sdate, provider_no;
-        """
-        st_name = get_query_results(cur, st_name_query)
-        print("length of scheduleDate: " + str(len(st_name)))
-        print(str(st_name[0]))
-
-        # get scheduletemplate
-        st_query = """
-        select * from scheduletemplate;
-        """
-        st = get_query_results(cur, st_query)
-        stdict = create_dict_2nd(st)
-        for item in stdict:
-            print(str(item)+" ->\t"+str(stdict[item][1]))
-
-        print
-        print(str(st_name[0][0]), str(st_name[0][1]), str(stdict[st_name[0][2]][1]))
+        st_name_dict = get_schedule_dict(cur)
+        print("length of schedule dict: " + str(len(st_name_dict)))
 
         # check for missing scheduletemplates
         cnt_missing_template = 0
         default = None
-        for item in st_name:
-            tresult = stdict.get(item[2], default)
+        for item in st_name_dict:
+            tresult = stdict.get(st_name_dict[item][0], default)
             if not tresult:
                 cnt_missing_template += 1
+                print("WARNING: Missing template: " + str(st_name_dict[item][0]))
         print "\t", str(cnt_missing_template), " missing templates"
 
     except Mdb.Error as e:
