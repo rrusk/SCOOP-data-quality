@@ -33,8 +33,20 @@ max_days_to_search = 180
 def create_dict(tlist):
     tdict = {}
     for trow in tlist:
-        tdict[trow[0]] = trow[1:]
+        if trow[0] in tdict:
+            print("WARNING: Duplicate key" + str(trow[0]))
+            continue  # only take first row with this key since Oscar EMR limits queries to 1 returned value
+        else:
+            tdict[trow[0]] = trow[1:]
     return tdict
+
+
+# get total sum of elements in dictionary containing values that are lists
+def sum_dict_values(the_dict):
+    item_cnt = 0
+    for the_key in the_dict:
+        item_cnt += len(the_dict[the_key])
+    return item_cnt
 
 
 # create dict of active providers with key provider_no and value [first_name, last_name].
@@ -47,26 +59,19 @@ def get_active_providers_dict(cursor):
 
 # get dict of scheduletemplatecodes with code as key and [duration, description] as value
 def get_schedule_template_code_dict(cursor):
-    query = """select code, duration, description from scheduletemplatecode order by code"""
+    query = """select code, duration, description, id from scheduletemplatecode order by code"""
     cursor.execute(query)
     result = cursor.fetchall()
     return create_dict(result)
 
 
 # get dictionary of schedule templates with name as key and [provider_no, summary, timecode] as value
+# The primary key to scheduletemplate is (provider_no, name).
 def get_schedule_template_dict(cursor):
     query = """select name, provider_no, summary, timecode from scheduletemplate"""
     cursor.execute(query)
     result = cursor.fetchall()
-    s_dict = {}
-    for s_item in result:
-        if s_item[0] == '':
-            s_dict['empty'] = s_item[1:]
-        elif s_item[0] is None:
-            s_dict['null'] = s_item[1:]
-        else:
-            s_dict[s_item[0]] = s_item[1:]
-    return s_dict
+    return create_dict(result)
 
 
 # test whether the timecode strings in scheduletemplate are valid
@@ -110,20 +115,46 @@ def validate_timecode_strings(schedule_template_dict, schedule_template_code_dic
 
 
 # get dictionary of schedule template name values indexed by (provider_no, date)
-def get_schedule_dict(cursor):
+def get_scheduledate_dict(cursor):
     # for reasons unknown some rows are duplicated in the scheduledate table (except for primary key) so the
     # dictionary can be shorter than complete list of rows
     query = """
-        select distinct sdate, provider_no, hour, available from scheduledate
-        where status='A' and hour!='' and hour is not NULL
-        order by sdate, provider_no;
+        select sdate, provider_no, hour, available, id from scheduledate
+        where status='A' order by sdate, provider_no;
         """
     cursor.execute(query)
     result = cursor.fetchall()
     s_dict = {}
     for s_item in result:
-        s_dict[(s_item[0], s_item[1])] = s_item[2:]
+        if (s_item[0], s_item[1]) in s_dict:
+            if s_dict[(s_item[0], s_item[1])][0] != s_item[2] or s_dict[(s_item[0], s_item[1])][1] != s_item[3]:
+                #  warn about values that are actually different asisde from their id
+                print("WARNING: key (" + str(s_item[0]) + ',' + str(s_item[1]) + ')'),
+                print("\thas multiple values ")
+                print('\t' + str(s_dict[(s_item[0], s_item[1])]))
+                print('\t' + str(s_item[2:]))
+            continue  # only take first row with this key since Oscar EMR limits queries to 1 returned value
+        else:
+            s_dict[(s_item[0], s_item[1])] = s_item[2:]
     return s_dict
+
+
+# get dictionary of appointments with key provide, day and values [start_time, end_time, appointment_no]
+# that are not "no-show" or "cancelled"
+def get_appointment_dict(cursor):
+    query = """
+        select provider_no, appointment_date, start_time, end_time, appointment_no from appointment
+        where status!='N' and status!='C' order by start_time;
+        """
+    cursor.execute(query)
+    result = cursor.fetchall()
+    app_dict = {}
+    for app_item in result:
+        if (app_item[0], app_item[1]) in app_dict:
+            app_dict[(app_item[0], app_item[1])].append(app_item[2:])
+        else:
+            app_dict[(app_item[0], app_item[1])] = [app_item[2:]]
+    return app_dict
 
 
 # reads csv file containing study providers listed row by row using first_name|last_name
@@ -228,7 +259,7 @@ if __name__ == '__main__':
         validate_timecode_strings(stdict, stc)
 
         # from scheduleDate get name of scheduletemplate
-        st_name_dict = get_schedule_dict(cur)
+        st_name_dict = get_scheduledate_dict(cur)
         print("length of schedule dict: " + str(len(st_name_dict)))
 
         # check for missing scheduletemplates
@@ -240,6 +271,11 @@ if __name__ == '__main__':
                 cnt_missing_template += 1
                 print("WARNING: Missing template: " + str(st_name_dict[item][0]))
         print "\t", str(cnt_missing_template), " missing templates"
+
+        # load appointment dictionary
+        appointment_dict = get_appointment_dict(cur)
+        print("length of appointment dict: " + str(len(appointment_dict)))
+        print("items in appointment dict: " + str(sum_dict_values(appointment_dict)))
 
     except Mdb.Error as e:
         print("Error %d: %s" % (e.args[0], e.args[1]))
