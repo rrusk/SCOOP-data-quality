@@ -71,24 +71,35 @@ def get_schedule_template_code_dict(cursor):
     return create_dict(result)
 
 
-# get dictionary of schedule templates with name as key and [provider_no, summary, timecode] as value
-# TODO the primary key to scheduletemplate is (provider_no, name).  May require modification
+# get dictionary of schedule templates with (name, provider_no) as key and [summary, timecode] as value
 def get_schedule_template_dict(cursor):
     query = """select name, provider_no, summary, timecode from scheduletemplate"""
     cursor.execute(query)
     result = cursor.fetchall()
-    return create_dict(result)
+    st_dict = {}
+    for st_item in result:
+        if (st_item[0], st_item[1]) in st_dict:
+            if st_dict[(st_item[0], st_item[1])][0] != st_item[2] or st_dict[(st_item[0], st_item[1])][1] != st_item[3]:
+                #  warn about values that are actually different
+                print("WARNING: key (" + str(st_item[0]) + ',' + str(st_item[1]) + ')'),
+                print("\thas multiple values ")
+                print('\t' + str(st_dict[(st_item[0], st_item[1])]))
+                print('\t' + str(st_item[2:]))
+            continue  # only take first row with this key
+        else:
+            st_dict[(st_item[0], st_item[1])] = st_item[2:]
+    return st_dict
 
 
 # test whether the timecode strings in scheduletemplate are valid
-def validate_timecode_strings(schedule_template_dict, schedule_template_code_dict):
+def validate_all_timecode_strings(schedule_template_dict, schedule_template_code_dict):
     result = True
     defaultv = None
     cnt_valid = 0
     cnt_invalid = 0
     cnt_missing_codes = 0
     for st_item in schedule_template_dict:
-        timecode_str = schedule_template_dict[st_item][2]
+        timecode_str = schedule_template_dict[st_item][1]
         total_min = 0
         warning = False
         for char in timecode_str:
@@ -119,6 +130,34 @@ def validate_timecode_strings(schedule_template_dict, schedule_template_code_dic
     print("scheduletemplate entries:")
     print(" Valid: " + str(cnt_valid) + " Invalid: " + str(cnt_invalid)),
     print(" Valid with unknown codes assumed 15 min in duration: " + str(cnt_missing_codes))
+    return result
+
+
+# test whether specific timecode string in scheduletemplate is valid
+def is_valid_timecode_string(timecode_str, schedule_template_code_dict):
+    result = True
+    defaultv = None
+    total_min = 0
+    warning = False
+    for char in timecode_str:
+        if char == '_':
+            total_min += 15
+        else:
+            value = schedule_template_code_dict.get(char, defaultv)
+            if value and value[0] != '':
+                total_min += int(value[0])
+            else:
+                total_min += 15  # assume unrecognized or absent codes have duration 15 minutes
+                warning = True
+    if total_min != 24 * 60:
+        sys.stdout.write("INVALID TIMECODE STRING [" + str(timecode_str)),
+        print("]: Totals " + str(total_min) + " rather then 1440")
+        print(str(timecode_str))
+        result = False
+    elif warning:
+        sys.stdout.write("WARNING: INVALID CODES IN TIMECODE STRING [" + str(timecode_str)),
+        print("]: (will assume unknown codes have 15 min durations)")
+        print(str(timecode_str))
     return result
 
 
@@ -171,13 +210,13 @@ def check_availability(app_dict, provider_no, ref_datetime, duration):
     the_date = ref_datetime.date()
     app_list = app_dict.get((provider_no, the_date), available_default)
     if app_list is None:
-        # print("NO APPOINTMENTS FOR provider_no=" + str(provider_no) + " on " + str(the_date))
+        print("NO APPOINTMENTS FOR provider_no=" + str(provider_no) + " on " + str(the_date))
         # for key in app_dict:
         #     print("Format is " + str(app_dict[key]))
         #     break
         return True
     start_time = ref_datetime
-    end_time = start_time + relativedelta(minutes=+(duration-1))
+    end_time = start_time + relativedelta(minutes=+(duration - 1))
     ref_date = datetime.combine(ref_datetime, datetime.min.time())  # 0:00AM on date checked
     booked = False
 
@@ -205,6 +244,53 @@ def check_availability(app_dict, provider_no, ref_datetime, duration):
     if booked:
         return False
     return True
+
+
+def find_next_available_appointments(sd_dict, st_dict, stc_dict, app_dict, ref_datetime, provider_no, duration=15,
+                                     num_appointments=3):
+    app_list = []
+    sd_default = None
+    sd = sd_dict.get((ref_datetime.date(), provider_no), sd_default)
+    if sd is None:
+        print("WARNING: no schedule for provider_no=" + str(provider_no) + " on " + str(ref_datetime))
+        return None
+    st_name = sd[0]  # hour field of scheduledate corresponds to name of scheduletemplate
+    if st_name.startswith('P:'):
+        template = st_dict.get((st_name, "Public"), default)
+    else:
+        template = st_dict.get((st_name, provider_no), default)
+    if not template:
+        print("ERROR: Missing template " + str(scheduledate_dict[item][0]) + " in find_next_available_appointments")
+        return None
+    timecodestr = template[1]
+    if not is_valid_timecode_string(timecodestr, stc_dict):
+        return None
+
+    # check which slots are available between the start and end times
+    total_min = 0
+    ref_date = datetime.combine(ref_datetime, datetime.min.time())
+    print("timecodestr [" + str(st_name) + "]:" + str(timecodestr))
+    for char in timecodestr:
+        if char == '_':
+            total_min += 15
+        else:
+            value = stc_dict.get(char, sd_default)
+            if value and value[0] != '':
+                total_min += int(value[0])
+            else:
+                total_min += 15  # assume unrecognized or absent codes have duration 15 minutes
+            start_app = ref_date + relativedelta(minutes=+total_min)
+            end_app = ref_date + relativedelta(minutes=+(total_min + duration - 1))
+            if start_app < ref_datetime:
+                print("skipping at " + str(start_app))
+                continue
+            if check_availability(app_dict, provider_no, start_app, duration):
+                app_list.append((start_app, end_app))
+                if len(app_list) >= num_appointments:
+                    break
+            else:
+                print("conflict at: " + str(start_app) + " " + str(end_app))
+    return app_list
 
 
 # reads csv file containing study providers listed row by row using first_name|last_name
@@ -295,33 +381,38 @@ if __name__ == '__main__':
 
         # get scheduletemplatecode
         stc = get_schedule_template_code_dict(cur)
-        print()
-        print("scheduletemplatecode:")
-        print('c duration\tdescription')
-        for item in stc:
-            print(str(item) + ' ' + str(stc[item][0]) + '\t' + str(stc[item][1]))
-
-        print("ERRORS: " + str(err_cnt))
+        # print()
+        # print("scheduletemplatecode:")
+        # print('c duration\tdescription')
+        # for item in stc:
+        #     print(str(item) + ' ' + str(stc[item][0]) + '\t' + str(stc[item][1]))
+        #
+        # print("ERRORS: " + str(err_cnt))
 
         # get schedule template dictionary
         stdict = get_schedule_template_dict(cur)
         # for item in stdict:
         #     print(str(item) + " ->\t" + str(stdict[item][2]))
 
-        validate_timecode_strings(stdict, stc)
+        validate_all_timecode_strings(stdict, stc)
 
         # from scheduleDate get name of scheduletemplate
-        st_name_dict = get_scheduledate_dict(cur)
-        print("length of schedule dict: " + str(len(st_name_dict)))
+        scheduledate_dict = get_scheduledate_dict(cur)
+        print("length of schedule dict: " + str(len(scheduledate_dict)))
 
         # check for missing scheduletemplates
         cnt_missing_template = 0
         default = None
-        for item in st_name_dict:
-            tresult = stdict.get(st_name_dict[item][0], default)
+        for item in scheduledate_dict:
+            templatename = scheduledate_dict[item][0]
+            clinic_provider_no = scheduledate_dict[item][1]
+            if templatename.startswith('P:'):
+                tresult = stdict.get((templatename, "Public"), default)
+            else:
+                tresult = stdict.get((templatename, clinic_provider_no), default)
             if not tresult:
                 cnt_missing_template += 1
-                print("WARNING: Missing template: " + str(st_name_dict[item][0]))
+                print("WARNING: Missing template: " + str(scheduledate_dict[item][0]))
         print "\t", str(cnt_missing_template), " missing templates"
 
         # load appointment dictionary
@@ -329,10 +420,15 @@ if __name__ == '__main__':
         print("length of appointment dict: " + str(len(appointment_dict)))
         print("items in appointment dict: " + str(sum_dict_values(appointment_dict)))
 
-        the_datetime = datetime(2015, 5, 1, 12, 45, 0)
+        the_datetime = datetime(2014, 3, 10, 8, 0, 0)
         print("the_datetime: " + str(the_datetime))
         availability_result = check_availability(appointment_dict, '101', the_datetime, 15)
         print("availability: " + str(availability_result))
+
+        provider_num = '101'
+        apps_list = find_next_available_appointments(scheduledate_dict, stdict, stc, appointment_dict, the_datetime,
+                                                     provider_num)
+        print("apps_list: " + str(apps_list))
 
     except Mdb.Error as e:
         print("Error %d: %s" % (e.args[0], e.args[1]))
