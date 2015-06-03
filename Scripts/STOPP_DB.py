@@ -14,7 +14,8 @@ __author__ = 'rrusk'
 
 import os
 import csv
-import datetime
+# import datetime
+from datetime import datetime, date
 # from datetime import date
 # import collections
 
@@ -34,8 +35,13 @@ def create_dict(tlist):
     tdict = {}
     for trow in tlist:
         if trow[0] in tdict:
-            print("WARNING: Duplicate key" + str(trow[0]))
-            continue  # only take first row with this key since Oscar EMR limits queries to 1 returned value
+            #  warn about values that are actually different
+            if tdict[trow[0]] != trow[1:]:
+                print("WARNING: key (" + str(trow[0])),
+                print("\thas multiple values ")
+                print('\t' + str(tdict[trow[0]]))
+                print('\t' + str(trow[1:]))
+            continue  # only take first row with this key
         else:
             tdict[trow[0]] = trow[1:]
     return tdict
@@ -66,7 +72,7 @@ def get_schedule_template_code_dict(cursor):
 
 
 # get dictionary of schedule templates with name as key and [provider_no, summary, timecode] as value
-# The primary key to scheduletemplate is (provider_no, name).
+# TODO the primary key to scheduletemplate is (provider_no, name).  May require modification
 def get_schedule_template_dict(cursor):
     query = """select name, provider_no, summary, timecode from scheduletemplate"""
     cursor.execute(query)
@@ -96,21 +102,23 @@ def validate_timecode_strings(schedule_template_dict, schedule_template_code_dic
                     total_min += 15  # assume unrecognized or absent codes have duration 15 minutes
                     warning = True
         if total_min != 24 * 60:
-            print("INVALID TIMECODE STRING FOR " + str(st_item) + ": Totals " + str(total_min) + " rather then 1440")
+            sys.stdout.write("INVALID TIMECODE STRING [" + str(st_item)),
+            print("]: Totals " + str(total_min) + " rather then 1440")
             print(str(timecode_str))
             cnt_invalid += 1
             result = False
         elif warning:
-            print("WARNING: INVALID CODES IN TIMECODE STRING FOR " + str(st_item)),
-            print(": (Assuming missing codes have 15 min durations)")
+            sys.stdout.write("WARNING: INVALID CODES IN TIMECODE STRING [" + str(st_item)),
+            print("]: (will assume unknown codes have 15 min durations)")
             print(str(timecode_str))
             cnt_missing_codes += 1
         else:
-            print("VALID TIMECODE STRING FOR " + str(st_item) + ":")
-            print(str(timecode_str))
+            # print("VALID TIMECODE STRING FOR " + str(st_item) + ":")
+            # print(str(timecode_str))
             cnt_valid += 1
-    print("Valid: " + str(cnt_valid) + " Invalid: " + str(cnt_invalid)),
-    print(" Valid with missing codes: " + str(cnt_missing_codes))
+    print("scheduletemplate entries:")
+    print(" Valid: " + str(cnt_valid) + " Invalid: " + str(cnt_invalid)),
+    print(" Valid with unknown codes assumed 15 min in duration: " + str(cnt_missing_codes))
     return result
 
 
@@ -155,6 +163,48 @@ def get_appointment_dict(cursor):
         else:
             app_dict[(app_item[0], app_item[1])] = [app_item[2:]]
     return app_dict
+
+
+# check appointment dictionary for existing booking at specified datetime and duration
+def check_availability(app_dict, provider_no, ref_datetime, duration):
+    available_default = None
+    the_date = ref_datetime.date()
+    app_list = app_dict.get((provider_no, the_date), available_default)
+    if app_list is None:
+        # print("NO APPOINTMENTS FOR provider_no=" + str(provider_no) + " on " + str(the_date))
+        # for key in app_dict:
+        #     print("Format is " + str(app_dict[key]))
+        #     break
+        return True
+    start_time = ref_datetime
+    end_time = start_time + relativedelta(minutes=+(duration-1))
+    ref_date = datetime.combine(ref_datetime, datetime.min.time())  # 0:00AM on date checked
+    booked = False
+
+    # print("ref_date: " + str(ref_date))
+    # print("start_time: " + str(start_time))
+    # print("end_time: " + str(end_time))
+    for app in app_list:
+        seconds_start = app[0].total_seconds()
+        seconds_end = app[1].total_seconds()
+        app_start = ref_date + relativedelta(seconds=+seconds_start)
+        app_end = ref_date + relativedelta(seconds=+seconds_end)
+        # print("checking app_start: " + str(app_start))
+        # print("checking app_end: " + str(app_end))
+        # print("seconds_start: " + str(seconds_start) + " for " + str(app[0]))
+        # print("seconds_end: " + str(seconds_end) + " for " + str(app[1]))
+        #
+        # TODO inefficient; since appointment is ordered by start_time this can be optimized further
+        if end_time < app_start or start_time > app_end:
+            continue
+        # print("found app_start: " + str(app_start) + " less than end_time: " + str(end_time))
+        # print("found app_end: " + str(app_end) + " greater than start_time: " + str(start_time))
+        booked = True
+        break
+
+    if booked:
+        return False
+    return True
 
 
 # reads csv file containing study providers listed row by row using first_name|last_name
@@ -204,8 +254,9 @@ if __name__ == '__main__':
 
         print("provider_list: " + str(study_providers))
 
-        end = datetime.date.fromordinal(datetime.date.today().toordinal() - 1)  # yesterday
-        start = end + relativedelta(months=-4)  # four months ago
+        # end = datetime.date.fromordinal(datetime.date.today().toordinal() - 1)  # yesterday
+        end = date.fromordinal(date.today().toordinal() - 1)  # yesterday
+        # start = end + relativedelta(months=-4)  # four months ago
 
         # connect to database
         con = Mdb.connect(host='127.0.0.1', port=db_port, user=db_user, passwd=db_passwd, db=db_name)
@@ -244,7 +295,8 @@ if __name__ == '__main__':
 
         # get scheduletemplatecode
         stc = get_schedule_template_code_dict(cur)
-        print"\nscheduletemplatecode:"
+        print()
+        print("scheduletemplatecode:")
         print('c duration\tdescription')
         for item in stc:
             print(str(item) + ' ' + str(stc[item][0]) + '\t' + str(stc[item][1]))
@@ -276,6 +328,11 @@ if __name__ == '__main__':
         appointment_dict = get_appointment_dict(cur)
         print("length of appointment dict: " + str(len(appointment_dict)))
         print("items in appointment dict: " + str(sum_dict_values(appointment_dict)))
+
+        the_datetime = datetime(2015, 5, 1, 12, 45, 0)
+        print("the_datetime: " + str(the_datetime))
+        availability_result = check_availability(appointment_dict, '101', the_datetime, 15)
+        print("availability: " + str(availability_result))
 
     except Mdb.Error as e:
         print("Error %d: %s" % (e.args[0], e.args[1]))
