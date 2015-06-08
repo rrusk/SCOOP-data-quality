@@ -167,8 +167,34 @@ def is_valid_timecode_string(timecode_str, schedule_template_code_dict):
         result = False
     elif warning:
         sys.stdout.write("WARNING: UNKNOW CODES IN TIMECODE STRING [" + str(timecode_str)),
-        print("]: (will assume unknown codes have " + str(slotduration) + "min durations)")
+        print("]: (will assume unknown codes have " + str(slotduration) + " min durations)")
         print(str(timecode_str))
+    return result
+
+
+# get beginning and end of schedule from timecode
+def get_timecode_start_stop(timecode):
+    minutes_per_day = 24. * 60
+    slotduration = minutes_per_day / len(timecode)
+    total_min = -slotduration
+    result = None
+    for char in timecode:
+        if char == '_':
+            total_min += slotduration
+        else:
+            total_min += slotduration
+            start_time = str(int(total_min) / 60) + ':' + str(int(total_min) % 60)
+            result = "Start time: " + str(start_time)
+            break
+    total_min = minutes_per_day + slotduration
+    for char in reversed(timecode):
+        if char == '_':
+            total_min -= slotduration
+        else:
+            total_min -= slotduration
+            stop_time = str(int(total_min) / 60) + ':' + str(int(total_min) % 60)
+            result += "\nStop time: " + str(stop_time)
+            break
     return result
 
 
@@ -263,7 +289,7 @@ def find_next_available_appointments(sd_dict, st_dict, stc_dict, app_dict, ref_d
     sd_default = None
     sd = sd_dict.get((ref_datetime.date(), provider_no), sd_default)
     if sd is None:
-        print("WARNING: no schedule for provider_no=" + str(provider_no) + " on " + str(ref_datetime))
+        # print("WARNING: no schedule for provider_no=" + str(provider_no) + " on " + str(ref_datetime))
         return None
     st_name = sd[0]  # hour field of scheduledate corresponds to name of scheduletemplate
     if st_name.startswith('P:'):
@@ -271,15 +297,18 @@ def find_next_available_appointments(sd_dict, st_dict, stc_dict, app_dict, ref_d
     else:
         template = st_dict.get((st_name, provider_no), default)
     if not template:
-        print("ERROR: Missing template " + str(scheduledate_dict[item][0]) + " in find_next_available_appointments")
+        sys.stdout.write("ERROR: Missing template [" + str(st_name) + "] for " + str(
+            provider_no) + " in find_next_available_appointments\n")
         return None
     timecodestr = template[1]
     if not is_valid_timecode_string(timecodestr, stc_dict):
         return None
 
+    # print(get_timecode_start_stop(timecodestr))
+
     # check which slots are available between the start and end times
     ref_date = datetime.combine(ref_datetime, datetime.min.time())
-    print("timecodestr [" + str(st_name) + "]:" + str(timecodestr))
+    # print("timecodestr [" + str(st_name) + "]:" + str(timecodestr))
 
     slotduration = (24. * 60) / len(timecodestr)
     total_min = -slotduration
@@ -327,6 +356,118 @@ def get_provider_nums(provider_list, study_provider_list):
             if provider_list[p][0].strip() == s[0].strip() and provider_list[p][1].strip() == s[1].strip():
                 pnums_list.append(p.strip())
     return pnums_list
+
+
+# patterned after ThirdApptTimeReport in Oscar's
+# src/main/java/oscar/oscarReport/reportByTemplate/ThirdApptTimeReporter.java
+def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols, appt_length):
+    num_days = -1
+    if date_from is None or provider_no_list is None or sched_symbols is None:
+        print("ERROR: appt_date and provider_no_list must be set and at least one schedule symbol must be set")
+        return False
+    provider_nums_str = ""
+    idx = 0
+    length = len(provider_no_list)
+    for provider_no in provider_no_list:
+        idx += 1
+        provider_nums_str += "'" + str(provider_no) + "'"
+        if idx < length:
+            provider_nums_str += ','
+
+    date_str = str(date_from.date())  # expect datetime object from which the date is extracted
+    schedule_sql = "select scheduledate.provider_no, scheduletemplate.timecode, scheduledate.sdate" \
+                   " from scheduletemplate, scheduledate" \
+                   " where scheduletemplate.name=scheduledate.hour and scheduledate.sdate >= '" + date_str + \
+                   "' and  scheduledate.provider_no in (" + provider_nums_str + ") and scheduledate.status = 'A' and " \
+                   " (scheduletemplate.provider_no=scheduledate.provider_no or scheduletemplate.provider_no='Public')" \
+                   " order by scheduledate.sdate"
+
+    day_mins = 24. * 60.
+    third = 3
+    num_appts = 0
+    i = 0
+    print('sql: ' + schedule_sql)
+    res = get_query_results(cursor, schedule_sql)
+    # print('schedule results length: ' + str(len(res)))
+    while i < len(res) and num_appts < third:
+        provider_no = res[i][0]
+        print("provider_no=" + str(provider_no))
+        st = res[i][1]
+        print("templatecode=" + str(st))
+        sd = res[i][2]
+        print("scheduledate=" + str(sd))
+        sched_date = sd
+        timecodes = st
+        duration = day_mins / len(timecodes)
+        appt_sql = "select start_time, end_time from appointment where appointment_date = '" + date_str + \
+                   "' and provider_no = '" + str(provider_no) + "' and status not like '%C%' " + \
+                   " order by appointment_date asc, start_time asc"
+        # print('appt_sql: ' + appt_sql)
+        appts = get_query_results(cursor, appt_sql)
+        codepos = 0
+        latest_appt_hour = 0
+        latest_appt_min = 0
+        unbooked = 0
+        itotalmin = 0
+        while itotalmin < day_mins:
+            code = timecodes[codepos]
+            codepos += 1
+            ihours = int(itotalmin / 60)
+            imins = int(itotalmin % 60)
+            appt_index = 0
+            while appt_index < len(appts):
+                # appt = appts[appt_index]
+                appt_time = appts[appt_index][0].total_seconds()
+                # print('appt_time=' + str(appt_time))
+                appt_hour_s = int(appt_time) / 3600
+                appt_min_s = int(appt_time) % 60
+
+                print('hour=' + str(appt_hour_s) + ' min=' + str(appt_min_s))
+                print('ihour=' + str(ihours) + ' imins=' + str(imins))
+                if ihours == appt_hour_s and imins == appt_min_s:
+                    appt_time = appts[appt_index][1].total_seconds()
+                    print("appt_time=" + str(appt_time))
+                    appt_hour_e = int(appt_time) / 3600
+                    appt_min_e = int(appt_time) % 60
+                    print('')
+                    if appt_hour_e > latest_appt_hour or \
+                            (appt_hour_e == latest_appt_hour and appt_min_e > latest_appt_min):
+                        latest_appt_hour = appt_hour_e
+                        latest_appt_min = appt_min_e
+                    appt_index += 1
+                else:
+                    appt_index -= 1
+                    break
+
+            code_match = False
+            sched_idx = 0
+            while sched_idx < len(sched_symbols):
+                if code == sched_symbols[sched_idx]:
+                    code_match = True
+                    if ihours > latest_appt_hour or (ihours == latest_appt_hour and imins > latest_appt_min):
+                        unbooked += duration
+
+                    if unbooked >= appt_length:
+                        unbooked = 0
+                        num_appts += 1
+                        if num_appts == third:
+                            break
+                sched_idx += 1
+
+            if num_appts == third:
+                break
+
+            if not code_match:
+                unbooked = 0
+
+            itotalmin += duration
+
+        if sched_date is not None:
+            # ms_in_day = 1000 * 60 * 60 * 24.
+            # num_days = (sched_date.time - date_from.time) / ms_in_day
+            pass
+
+        print("num_days: " + str(num_days) + " date_from: " + str(date_from) + " sched_date: " + str(sched_date))
 
 
 # used to tune script to specific database configuration settings
@@ -451,7 +592,7 @@ if __name__ == '__main__':
 
         for provider_num in provider_nos:
             # provider_num = '101'
-            the_datetime = datetime(2014, 4, 1, 0, 0, 0)
+            the_datetime = datetime(2015, 6, 4, 0, 0, 0)
             num_apps = 0
             days = 0
             apps_list = []
@@ -472,6 +613,8 @@ if __name__ == '__main__':
             for item in apps_list:
                 print(str(item))
             print("Days to 3rd next appointment = " + str(days) + " for " + str(provider_num))
+
+        third_appt_time_reporter(cur, provider_nos, the_datetime, ['1'], 15)
 
     except Mdb.Error as e:
         print("Error %d: %s" % (e.args[0], e.args[1]))
