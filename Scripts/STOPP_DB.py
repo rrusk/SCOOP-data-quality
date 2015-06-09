@@ -358,13 +358,8 @@ def get_provider_nums(provider_list, study_provider_list):
     return pnums_list
 
 
-# patterned after ThirdApptTimeReport in Oscar's
-# src/main/java/oscar/oscarReport/reportByTemplate/ThirdApptTimeReporter.java
-def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols, appt_length):
-    num_days = -1
-    if date_from is None or provider_no_list is None or sched_symbols is None:
-        print("ERROR: appt_date and provider_no_list must be set and at least one schedule symbol must be set")
-        return False
+# builds a string from provider_no entries in provider_no_list, for example  "('101', '102', '999998')"
+def build_provider_no_str(provider_no_list):
     provider_nums_str = ""
     idx = 0
     length = len(provider_no_list)
@@ -373,7 +368,17 @@ def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols,
         provider_nums_str += "'" + str(provider_no) + "'"
         if idx < length:
             provider_nums_str += ','
+    return provider_nums_str
 
+
+# patterned after ThirdApptTimeReport in Oscar's
+# src/main/java/oscar/oscarReport/reportByTemplate/ThirdApptTimeReporter.java
+def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols_list, appt_length):
+    num_days = -1
+    if date_from is None or provider_no_list is None or sched_symbols_list is None:
+        print("ERROR: date_from and provider_no_list must be set and at least one schedule symbol must be set")
+        return False
+    provider_nums_str = build_provider_no_str(provider_no_list)
     date_str = str(date_from.date())  # expect datetime object from which the date is extracted
     schedule_sql = "select scheduledate.provider_no, scheduletemplate.timecode, scheduledate.sdate" \
                    " from scheduletemplate, scheduledate" \
@@ -381,28 +386,30 @@ def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols,
                    "' and  scheduledate.provider_no in (" + provider_nums_str + ") and scheduledate.status = 'A' and " \
                    " (scheduletemplate.provider_no=scheduledate.provider_no or scheduletemplate.provider_no='Public')" \
                    " order by scheduledate.sdate"
-
-    day_mins = 24. * 60.
-    third = 3
-    num_appts = 0
-    i = 0
-    print('sql: ' + schedule_sql)
+    # print('sql: ' + schedule_sql)
     res = get_query_results(cursor, schedule_sql)
     # print('schedule results length: ' + str(len(res)))
+    # print('schedule results:')
+    # for r in res:
+    #     print(str(r))
+
+    day_mins = 24. * 60.
+    i = 0
+    num_appts = 0
+    third = 3
+    sched_date = None
     while i < len(res) and num_appts < third:
         provider_no = res[i][0]
         print("provider_no=" + str(provider_no))
-        st = res[i][1]
-        print("templatecode=" + str(st))
-        sd = res[i][2]
-        print("scheduledate=" + str(sd))
-        sched_date = sd
-        timecodes = st
+        timecodes = res[i][1]
+        print("templatecode=" + str(timecodes))
+        sched_date = res[i][2]
+        print("scheduledate=" + str(sched_date))
         duration = day_mins / len(timecodes)
         appt_sql = "select start_time, end_time from appointment where appointment_date = '" + date_str + \
                    "' and provider_no = '" + str(provider_no) + "' and status not like '%C%' " + \
-                   " order by appointment_date asc, start_time asc"
-        # print('appt_sql: ' + appt_sql)
+                   " order by start_time asc"
+        print('appt_sql: ' + appt_sql)
         appts = get_query_results(cursor, appt_sql)
         codepos = 0
         latest_appt_hour = 0
@@ -412,10 +419,12 @@ def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols,
         while itotalmin < day_mins:
             code = timecodes[codepos]
             codepos += 1
+            print("iTotalMin: " + str(itotalmin) + " codepos: " + str(codepos))
             ihours = int(itotalmin / 60)
             imins = int(itotalmin % 60)
             appt_index = 0
             while appt_index < len(appts):
+                print("appt_index: " + str(appt_index))
                 # appt = appts[appt_index]
                 appt_time = appts[appt_index][0].total_seconds()
                 # print('appt_time=' + str(appt_time))
@@ -426,23 +435,22 @@ def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols,
                 print('ihour=' + str(ihours) + ' imins=' + str(imins))
                 if ihours == appt_hour_s and imins == appt_min_s:
                     appt_time = appts[appt_index][1].total_seconds()
-                    print("appt_time=" + str(appt_time))
                     appt_hour_e = int(appt_time) / 3600
                     appt_min_e = int(appt_time) % 60
-                    print('')
+                    print('appt_hour_e=' + str(appt_hour_e) + ' min=' + str(appt_min_e))
                     if appt_hour_e > latest_appt_hour or \
                             (appt_hour_e == latest_appt_hour and appt_min_e > latest_appt_min):
                         latest_appt_hour = appt_hour_e
                         latest_appt_min = appt_min_e
-                    appt_index += 1
                 else:
                     appt_index -= 1
                     break
+                appt_index += 1
 
             code_match = False
             sched_idx = 0
-            while sched_idx < len(sched_symbols):
-                if code == sched_symbols[sched_idx]:
+            while sched_idx < len(sched_symbols_list):
+                if code == sched_symbols_list[sched_idx]:
                     code_match = True
                     if ihours > latest_appt_hour or (ihours == latest_appt_hour and imins > latest_appt_min):
                         unbooked += duration
@@ -462,12 +470,11 @@ def third_appt_time_reporter(cursor, provider_no_list, date_from, sched_symbols,
 
             itotalmin += duration
 
-        if sched_date is not None:
-            # ms_in_day = 1000 * 60 * 60 * 24.
-            # num_days = (sched_date.time - date_from.time) / ms_in_day
-            pass
+    if sched_date is not None:
+        num_days = (sched_date - date_from.date()).days
 
-        print("num_days: " + str(num_days) + " date_from: " + str(date_from) + " sched_date: " + str(sched_date))
+    print("num_days: " + str(num_days) + " date_from: " + str(date_from) + " sched_date: " + str(sched_date)),
+    print(" num_appts: " + str(num_appts))
 
 
 # used to tune script to specific database configuration settings
