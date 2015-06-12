@@ -198,6 +198,16 @@ def get_timecode_start_stop(timecode):
     return result
 
 
+# get beginning and end of schedule from timecode
+def show_timecode_start_stop(timecode):
+    minutes_per_day = 24. * 60
+    slotduration = minutes_per_day / len(timecode)
+    total_min = -slotduration
+    for char in timecode:
+        total_min += slotduration
+        print(char + " " + str(int(total_min) / 60) + ':' + str(int(total_min) % 60))
+
+
 # get dictionary of schedule template name values indexed by (provider_no, date)
 def get_scheduledate_dict(cursor):
     # for reasons unknown some rows are duplicated in the scheduledate table (except for primary key) so the
@@ -226,9 +236,12 @@ def get_scheduledate_dict(cursor):
 # get dictionary of appointments with key provide, day and values [start_time, end_time, appointment_no]
 # that are not "no-show" or "cancelled"
 def get_appointment_dict(cursor):
+    #  Note, Oscar's code in src/main/webapp/appointment/appointmentsearch.jsp and
+    #  src/main/java/org/oscarehr/appointment/web/NextAppointmentSearchHelper.java
+    #  uses a database query similar to the following but with "status!='N' and status!='C'"
     query = """
         select provider_no, appointment_date, start_time, end_time, appointment_no from appointment
-        where status!='N' and status!='C' order by appointment_date, start_time;
+        where status!='C' order by appointment_date, start_time;
         """
     cursor.execute(query)
     result = cursor.fetchall()
@@ -243,6 +256,7 @@ def get_appointment_dict(cursor):
 
 # check appointment dictionary for existing booking at specified datetime and duration
 def check_availability(app_dict, provider_no, ref_datetime, duration):
+    # print("check: " + str(ref_datetime))
     available_default = None
     the_date = ref_datetime.date()
     next_app_list = app_dict.get((provider_no, the_date), available_default)
@@ -251,7 +265,7 @@ def check_availability(app_dict, provider_no, ref_datetime, duration):
         # for key in app_dict:
         #     print("Format is " + str(app_dict[key]))
         #     break
-        return True
+        return True  # true because provider_no has templatecode set for that schedule date but no appointments yet
     start_time = ref_datetime
     end_time = start_time + relativedelta(minutes=+(duration - 1))
     ref_date = datetime.combine(ref_datetime, datetime.min.time())  # 0:00AM on date checked
@@ -260,26 +274,26 @@ def check_availability(app_dict, provider_no, ref_datetime, duration):
     # print("ref_date: " + str(ref_date))
     # print("start_time: " + str(start_time))
     # print("end_time: " + str(end_time))
+    # print("len(next_app_list): " + str(len(next_app_list)))
     for app in next_app_list:
         seconds_start = app[0].total_seconds()
         seconds_end = app[1].total_seconds()
         app_start = ref_date + relativedelta(seconds=+seconds_start)
         app_end = ref_date + relativedelta(seconds=+seconds_end)
-        # print("checking app_start: " + str(app_start))
-        # print("checking app_end: " + str(app_end))
+        # print("checking app_start: " + str(app_start)),
+        # print(", checking app_end: " + str(app_end))
         # print("seconds_start: " + str(seconds_start) + " for " + str(app[0]))
         # print("seconds_end: " + str(seconds_end) + " for " + str(app[1]))
         #
         # TODO inefficient; since appointment is ordered by start_time this can be optimized further
         if end_time < app_start or start_time > app_end:
             continue
-        # print("found app_start: " + str(app_start) + " less than end_time: " + str(end_time))
-        # print("found app_end: " + str(app_end) + " greater than start_time: " + str(start_time))
         booked = True
         break
 
     if booked:
         return False
+    # print("Open for " + str(start_time) + " " + str(end_time))
     return True
 
 
@@ -301,6 +315,10 @@ def find_next_available_appointments(sd_dict, st_dict, stc_dict, app_dict, ref_d
             provider_no) + " in find_next_available_appointments\n")
         return None
     timecodestr = template[1]
+
+    # print("provider_no=" + str(provider_no) + " ref_datetime " + str(ref_datetime))
+    # show_timecode_start_stop(timecodestr)
+
     if not is_valid_timecode_string(timecodestr, stc_dict):
         return None
 
@@ -599,7 +617,7 @@ if __name__ == '__main__':
 
         for provider_num in provider_nos:
             # provider_num = '101'
-            the_datetime = datetime(2015, 6, 4, 0, 0, 0)
+            the_datetime = datetime(2015, 6, 9, 0, 0, 0)
             num_apps = 0
             days = 0
             apps_list = []
@@ -621,7 +639,7 @@ if __name__ == '__main__':
                 print(str(item))
             print("Days to 3rd next appointment = " + str(days) + " for " + str(provider_num))
 
-        third_appt_time_reporter(cur, provider_nos, the_datetime, ['1'], 15)
+            # third_appt_time_reporter(cur, provider_nos, the_datetime, ['1'], 15)
 
     except Mdb.Error as e:
         print("Error %d: %s" % (e.args[0], e.args[1]))
